@@ -452,6 +452,22 @@ export default function App() {
               />
               資金不足時は中途換金して充当
             </label>
+            <label className="flex items-start gap-2 text-sm">
+              <input
+                type="checkbox"
+                className="mt-0.5"
+                checked={strategy.reissue ?? false}
+                onChange={(e) => setStrategy({ ...strategy, reissue: e.target.checked })}
+              />
+              <span>
+                満期後も新規発行を継続（再投資・その先のIF）
+                <span className="block text-[11px] text-slate-500">
+                  {strategy.reissue
+                    ? '10年満期→再応募を繰り返し、30年を通じて運用し続ける想定。'
+                    : 'OFF＝開始から最大10回の単発。10年サイクル後は債券が満期で無くなります。'}
+                </span>
+              </span>
+            </label>
             {/* 最適口数・継続上限の表示 */}
             <div className="mt-2 p-2 bg-sky-50 border border-sky-200 rounded text-xs space-y-1">
               <div className="text-sky-800 font-medium">この物件の口数の目安（自動試算）</div>

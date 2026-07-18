@@ -101,6 +101,12 @@ export interface BondStrategy {
   purchaseYears: number
   /** 資金不足時に中途換金して充当するか（発行から1年経過した債券のみ対象） */
   allowEarlyRedemption: boolean
+  /**
+   * 満期後も新規発行を継続するか（再投資モード）。
+   * false（既定）: 開始年から最大 purchaseYears(≤10)回の単発シリーズ。同一口数を買えない年で打ち切り。
+   * true: 試算期間中、毎年 unitsPerYear まで買えるだけ購入し続ける（10年満期→再応募を繰り返す想定のIF）。
+   */
+  reissue?: boolean
 }
 
 /** 1年度分の計算結果 */

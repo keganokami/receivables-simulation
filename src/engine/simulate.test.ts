@@ -113,6 +113,50 @@ describe('すまい・る債', () => {
   })
 })
 
+describe('再投資モード（reissue）', () => {
+  const bigReserve = baseInput({
+    openingBalance: 200_000_000,
+    horizonYears: 25,
+    reserveSteps: [{ fromYear: 2022, monthlyPerUnit: 20_000 }],
+  })
+
+  it('reissue=false は最大 purchaseYears 回で購入が止まる', () => {
+    const res = simulate(bigReserve, flatRate, {
+      enabled: true,
+      startYear: 2026,
+      unitsPerYear: 5,
+      purchaseYears: 10,
+      allowEarlyRedemption: true,
+      reissue: false,
+    })
+    const buyYears = res.rows.filter((r) => r.bondPurchase > 0).length
+    expect(buyYears).toBeLessThanOrEqual(10)
+  })
+
+  it('reissue=true は試算期間を通じて購入を継続する', () => {
+    const res = simulate(bigReserve, flatRate, {
+      enabled: true,
+      startYear: 2026,
+      unitsPerYear: 5,
+      purchaseYears: 10,
+      allowEarlyRedemption: true,
+      reissue: true,
+    })
+    const buyYears = res.rows.filter((r) => r.bondPurchase > 0).length
+    expect(buyYears).toBeGreaterThan(10) // 10年を超えて継続発行される
+  })
+
+  it('reissue=true の方が累計利息が多い（お金が働き続ける）', () => {
+    const off = simulate(bigReserve, flatRate, {
+      enabled: true, startYear: 2026, unitsPerYear: 5, purchaseYears: 10, allowEarlyRedemption: true, reissue: false,
+    })
+    const on = simulate(bigReserve, flatRate, {
+      enabled: true, startYear: 2026, unitsPerYear: 5, purchaseYears: 10, allowEarlyRedemption: true, reissue: true,
+    })
+    expect(on.totalInterest).toBeGreaterThan(off.totalInterest)
+  })
+})
+
 describe('積立金の引き上げ', () => {
   it('reserveBoost で fromYear 以降の積立金収入に定額が上乗せされる', () => {
     const input = baseInput({

@@ -183,52 +183,49 @@ export function simulate(
       if (firstShortfallYear === null) firstShortfallYear = year
     }
 
-    // --- すまい・る債の新規購入（同一口数継続ルール） ---
+    // --- すまい・る債の新規購入 ---
     let bondPurchase = 0
-    const inPurchaseWindow =
-      strategy.enabled &&
-      strategy.unitsPerYear > 0 &&
-      year >= strategy.startYear &&
-      year < strategy.startYear + Math.min(strategy.purchaseYears, BOND_TERM_YEARS)
-    if (inPurchaseWindow) {
+    if (strategy.enabled && strategy.unitsPerYear > 0 && year >= strategy.startYear) {
       // 購入上限の「前年度末残高」は流動＋債券の総資産（JHF規程上の積立金残高に債券保有分を含む解釈）
       const maxUnitsByRule = Math.floor((reserveIncome + priorYearEndTotal) / BOND_UNIT_YEN)
       // 手元資金で買える口数
       const maxUnitsByCash = Math.floor(liquid / BOND_UNIT_YEN)
+      const buy = (units: number) => {
+        bondPurchase = units * BOND_UNIT_YEN
+        liquid -= bondPurchase
+        tranches.push({
+          issueYear: year,
+          principal: bondPurchase,
+          rate: bondRateFor(scenario, input, year),
+        })
+      }
 
-      if (continuationUnits === null) {
-        // 初回: 要求口数を買えるか確認
-        const units = Math.min(strategy.unitsPerYear, maxUnitsByRule, maxUnitsByCash)
-        if (units >= strategy.unitsPerYear) {
-          // 全量購入できる → シリーズ開始
-          continuationUnits = units
-          bondPurchase = continuationUnits * BOND_UNIT_YEN
-          liquid -= bondPurchase
-          tranches.push({
-            issueYear: year,
-            principal: bondPurchase,
-            rate: bondRateFor(scenario, input, year),
-          })
-        } else {
-          // 全量買えない → シリーズ不成立（以降も購入しない）
-          continuationUnits = 0
-        }
-      } else if (continuationUnits > 0) {
-        // 継続中: 同一口数を買えるか確認
-        if (continuationUnits <= maxUnitsByRule && continuationUnits <= maxUnitsByCash) {
-          bondPurchase = continuationUnits * BOND_UNIT_YEN
-          liquid -= bondPurchase
-          tranches.push({
-            issueYear: year,
-            principal: bondPurchase,
-            rate: bondRateFor(scenario, input, year),
-          })
-        } else {
-          // 同一口数を買えない → シリーズ終了（部分購入なし、以降も購入しない）
-          continuationUnits = 0
+      if (strategy.reissue) {
+        // 再投資モード: 満期後も新規発行を継続（10年満期→再応募を繰り返す想定）。
+        // 試算期間中、毎年 target まで「買えるだけ」購入する（同一口数の打ち切りはしない）。
+        const units = Math.max(0, Math.min(strategy.unitsPerYear, maxUnitsByRule, maxUnitsByCash))
+        if (units > 0) buy(units)
+      } else {
+        // 単発シリーズ: 開始年から最大 purchaseYears(≤10)回、同一口数継続。買えない年で打ち切り。
+        const inWindow = year < strategy.startYear + Math.min(strategy.purchaseYears, BOND_TERM_YEARS)
+        if (inWindow) {
+          if (continuationUnits === null) {
+            const units = Math.min(strategy.unitsPerYear, maxUnitsByRule, maxUnitsByCash)
+            if (units >= strategy.unitsPerYear) {
+              continuationUnits = units
+              buy(units)
+            } else {
+              continuationUnits = 0 // 全量買えない → シリーズ不成立
+            }
+          } else if (continuationUnits > 0) {
+            if (continuationUnits <= maxUnitsByRule && continuationUnits <= maxUnitsByCash) {
+              buy(continuationUnits)
+            } else {
+              continuationUnits = 0 // 同一口数を買えない → シリーズ終了（以降も購入しない）
+            }
+          }
         }
       }
-      // continuationUnits === 0 の場合: 購入しない
     }
 
     cumulativeInterest += bondInterest + depositInterest
