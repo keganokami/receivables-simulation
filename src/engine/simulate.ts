@@ -201,7 +201,7 @@ export function simulate(
       }
 
       if (strategy.reissue) {
-        // 再投資モード: 満期後も新規発行を継続（10年満期→再応募を繰り返す想定）。
+        // 継続運用モード: 満期後も新規発行を継続（10年満期→再応募を繰り返す想定）。
         // 試算期間中、毎年 target まで「買えるだけ」購入する（同一口数の打ち切りはしない）。
         const units = Math.max(0, Math.min(strategy.unitsPerYear, maxUnitsByRule, maxUnitsByCash))
         if (units > 0) buy(units)

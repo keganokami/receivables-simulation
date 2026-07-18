@@ -144,7 +144,7 @@ export default function App() {
     }
   }, [input, scenario, strategy, withBond.endingTotal])
 
-  // 実装1: 最適口数・実質上限（再投資モードを反映）
+  // 実装1: 最適口数・実質上限（継続運用モードを反映）
   const optimalInfo = useMemo(
     () => findOptimalUnits(input, scenario, strategy.reissue ?? false),
     [input, scenario, strategy.reissue]
@@ -463,11 +463,14 @@ export default function App() {
                 onChange={(e) => setStrategy({ ...strategy, reissue: e.target.checked })}
               />
               <span>
-                満期後も新規発行を継続（再投資・その先のIF）
+                継続運用（満期後も再応募）— その先のIF
                 <span className="block text-[11px] text-slate-500">
                   {strategy.reissue
-                    ? '10年満期→再応募を繰り返し、30年を通じて運用し続ける想定。'
-                    : 'OFF＝開始から最大10回の単発。10年サイクル後は債券が満期で無くなります。'}
+                    ? 'ON＝10回終了・満期後も新規応募して発行を買い続け、30年を通じて運用する想定。'
+                    : 'OFF＝同一口数で最大10回の1シリーズのみ。満期後は債券が無くなり運用が途切れます。'}
+                </span>
+                <span className="block text-[11px] text-slate-400">
+                  制度：継続購入は毎年<strong>同一口数</strong>（増額・減額はできず、変更・再開はいずれも新規応募）。
                 </span>
               </span>
             </label>
@@ -476,7 +479,7 @@ export default function App() {
               <div className="text-sky-800 font-medium">
                 この物件の口数の目安（自動試算）
                 {(strategy.reissue ?? false) && (
-                  <span className="ml-1 text-sky-600 font-normal">再投資モード：満期後も継続発行の前提</span>
+                  <span className="ml-1 text-sky-600 font-normal">継続運用モード：満期後も継続発行の前提</span>
                 )}
               </div>
               <InfoRow
@@ -728,7 +731,7 @@ export default function App() {
             </p>
             {(strategy.reissue ?? false) && (
               <p className="text-xs text-sky-700 bg-sky-50 border border-sky-200 rounded px-2 py-1">
-                再投資モード ON：満期後も新規発行を継続する前提で試算しています。
+                継続運用モード ON：満期後も新規発行を継続する前提で試算しています。
               </p>
             )}
             <div className="overflow-x-auto">

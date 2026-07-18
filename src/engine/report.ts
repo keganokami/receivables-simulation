@@ -111,7 +111,7 @@ export interface ReportData {
     inflationRate: number
     /** アプリで現在選択中の すまい・る債 口数/年（0=運用なし） */
     currentUnitsPerYear: number
-    /** 再投資モード（満期後も新規発行を継続するか） */
+    /** 継続運用モード（満期後も新規発行を継続するか） */
     reissue: boolean
     /** reserveBoost が設定されている場合の情報 */
     reserveBoost?: {

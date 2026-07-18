@@ -113,7 +113,7 @@ describe('すまい・る債', () => {
   })
 })
 
-describe('再投資モード（reissue）', () => {
+describe('継続運用モード（reissue）', () => {
   const bigReserve = baseInput({
     openingBalance: 200_000_000,
     horizonYears: 25,

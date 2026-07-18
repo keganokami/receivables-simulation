@@ -454,10 +454,10 @@ describe('evaluatePlan', () => {
 })
 
 // ============================================================
-// reissue（再投資モード）の ON/OFF 比較テスト
+// reissue（継続運用モード）の ON/OFF 比較テスト
 // ============================================================
 
-describe('reissue（再投資モード）の伝播', () => {
+describe('reissue（継続運用モード）の伝播', () => {
   // 標準シナリオ・物価0%・60口/年 で reissue OFF と ON を比較
   const inputZero = { ...GEO_SAITO_COMBINED, inflationRate: 0 }
   const stratOff = { ...GEO_SAITO_STRATEGY, unitsPerYear: 60, reissue: false }
@@ -472,7 +472,7 @@ describe('reissue（再投資モード）の伝播', () => {
   })
 
   it('reissue=true の方が plans（各案）の benefit が大きい（または同等）', () => {
-    // 再投資モードは30年を通じて運用し続けるため、メリットが大きくなる傾向
+    // 継続運用モードは30年を通じて運用し続けるため、メリットが大きくなる傾向
     for (const planOn of dataOn.plans) {
       const planOff = dataOff.plans.find((p) => p.key === planOn.key)
       if (planOff) {

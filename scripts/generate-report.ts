@@ -165,7 +165,7 @@ const bigWorksRows = data.bigWorks
   .join('')
 
 const reissueNote = data.meta.reissue
-  ? '・再投資モード：満期後も新規発行を継続する前提'
+  ? '・継続運用（満期後も再応募して継続）'
   : ''
 const perAccountCaption = `シナリオ「${esc(data.meta.scenarioName)}」・物価上昇率 ${pct(data.meta.inflationRate * 100)}・すまい・る債 ${data.meta.currentUnitsPerYear}口/年${reissueNote} の前提で棟別に再計算`
 
@@ -194,7 +194,7 @@ function comparisonTable(c: ReportData['comparison'][number], reissue: boolean):
     )
     .join('')
   return `<h4>${esc(c.scenario)}（債券 ${pct(c.bondRateStart)}〜 / 預金 ${pct(c.depositRate)}）</h4>
-  <p class="sub">★ 現在選択中の口数。選択シナリオ「${esc(c.scenario)}」での試算。${reissue ? '再投資モード（満期後も継続発行の前提）で算出。' : ''}</p>
+  <p class="sub">★ 現在選択中の口数。選択シナリオ「${esc(c.scenario)}」での試算。${reissue ? '継続運用モード（満期後も継続発行の前提）で算出。' : ''}</p>
   <table>
     <thead><tr><th>戦略</th><th class="r">累計利息</th><th class="r">運用メリット</th><th class="r">最低残高</th><th class="r">資金ショート</th></tr></thead>
     <tbody>${rows}</tbody>
@@ -401,12 +401,12 @@ const html = `<!doctype html>
   <div class="legend"><b style="color:#0ea5e9">━ すまい・る債運用あり</b>　<b style="color:#94a3b8">┈ 運用なし</b>　<b style="color:#fca5a5">▮ 修繕支出</b></div>
 
   <h2>5. すまい・る債 運用プラン比較（3案）</h2>
-  <p>物件の資金状況に合わせた3案を比較します。シナリオ「${esc(data.meta.scenarioName)}」・物価上昇率 ${pct(data.meta.inflationRate * 100)} での試算。${data.meta.reissue ? '<strong>再投資モード：満期後も新規発行を継続する前提（10年満期→再応募を繰り返す想定）で算出。</strong>' : ''}</p>
+  <p>物件の資金状況に合わせた3案を比較します。シナリオ「${esc(data.meta.scenarioName)}」・物価上昇率 ${pct(data.meta.inflationRate * 100)} での試算。${data.meta.reissue ? '<strong>継続運用モード：満期後も新規発行を継続する前提（10年満期→再応募を繰り返す想定）で算出。</strong>' : ''}</p>
   ${planComparisonHtml(data)}
   ${data.meta.reserveBoost ? `<div class="box"><p style="margin:0"><strong>積立金の引き上げ設定：</strong>+${data.meta.reserveBoost.perUnitMonth.toLocaleString('ja-JP')}円/戸月（${data.meta.reserveBoost.fromYear}年〜） ／ 30年追加徴収 ${man(data.meta.reserveBoost.totalExtra)}</p></div>` : ''}
 
   <h2>6. すまい・る債 口数の目安（最適口数の自動試算）</h2>
-  <p>シミュレーションにより、この物件での口数ごとの運用メリットを自動試算した結果です。${data.meta.reissue ? '<strong>再投資モード：満期後も継続発行の前提で算出。</strong>' : ''}</p>
+  <p>シミュレーションにより、この物件での口数ごとの運用メリットを自動試算した結果です。${data.meta.reissue ? '<strong>継続運用モード：満期後も継続発行の前提で算出。</strong>' : ''}</p>
   ${optimalUnitsHtml}
 
   <h2>7. 運用は「必要な値上げを月いくら節約するか」</h2>
