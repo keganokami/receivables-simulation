@@ -15,7 +15,7 @@ import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-import { buildReportData, ReportData, PlanEvalResult } from '../src/engine/report'
+import { buildReportData, ReportData, PlanEvalResult, SHORTFALL_MATRIX_LEVELS } from '../src/engine/report'
 import { GEO_SAITO_COMBINED, GEO_SAITO_STRATEGY } from '../src/engine/geoSaito'
 import { AssociationInput, BondStrategy } from '../src/engine/types'
 
@@ -301,6 +301,43 @@ const requiredIncreaseHtml = `
     積立金の引き上げが主レバーであり、すまい・る債はその負担を軽減するツールです。</p>
   </div>`
 
+// ---- 追加4: 資金ショート解消マトリクス（積立引き上げ × すまい・る債の有無） ----
+const sm = data.shortfallMatrix
+function shortfallMatrixHtml(d: ReportData): string {
+  if (sm.noShortfallAtBaseline) {
+    return `<div class="box" style="background:#ecfdf5;border-color:#a7f3d0">
+      <p style="margin:0" class="ok">現在の前提では資金ショートは発生しません（物価上昇率を上げると必要な引き上げが見えます）。</p>
+    </div>`
+  }
+  const cellHtml = (c: { shortfallYear: number | null; minBalance: { value: number; year: number } }, hl: boolean) => `
+    <td class="r ${hl ? 'hl' : ''}">
+      <span class="${c.shortfallYear ? 'neg' : 'ok'}">${c.shortfallYear ? c.shortfallYear + '年に不足' : '✅ 解消'}</span>
+      <div style="font-size:10px;color:#64748b">最低残高 ${man(c.minBalance.value)}（${c.minBalance.year}年）</div>
+    </td>`
+  const rows = SHORTFALL_MATRIX_LEVELS.map((lvl, i) => {
+    const noBondCell = sm.noBond[i]
+    const withBondCell = sm.withBond[i]
+    return `<tr>
+      <td>${lvl === 0 ? '+0円/月（現行）' : '+' + lvl.toLocaleString('ja-JP') + '円/月'}</td>
+      ${cellHtml(noBondCell, sm.firstResolvedNoBond === lvl)}
+      ${cellHtml(withBondCell, sm.firstResolvedWithBond === lvl)}
+    </tr>`
+  }).join('')
+  const saving = sm.requiredNoBond - sm.requiredWithBond
+  return `<table>
+    <thead><tr><th>引き上げ額（戸あたり月額）</th><th class="r">運用なし</th><th class="r">すまい・る債あり（現在の設定）</th></tr></thead>
+    <tbody>${rows}</tbody>
+  </table>
+  <div class="box">
+    <p style="margin:0">
+      運用なしでは${sm.requiredNoBond > 0 ? `<strong>+${sm.requiredNoBond.toLocaleString('ja-JP')}円/戸月</strong>` : 'なし'}が必要 →
+      すまい・る債運用ありなら${sm.requiredWithBond > 0 ? `<strong>+${sm.requiredWithBond.toLocaleString('ja-JP')}円/戸月</strong>` : 'なし'}で解消
+      ${saving > 0 ? `（<strong class="ok">▲${saving.toLocaleString('ja-JP')}円/戸月の節約</strong>）` : ''}。
+    </p>
+  </div>
+  <p class="sub">現在の設定（シナリオ「${esc(d.meta.scenarioName)}」・物価上昇率 ${pct(d.meta.inflationRate * 100)}）を前提とした試算です。表の各水準は独立に試算しており、上乗せ開始年度は${sm.fromYear}年です。</p>`
+}
+
 // ---- 追加3: 棟別の毎月の修繕積立金セクション ----
 const pam = data.perAccountMonthly
 const yen = (n: number) => n.toLocaleString('ja-JP') + '円'
@@ -322,7 +359,8 @@ const perAccountMonthlyHtml = `
       <tr class="hl"><td><strong>DE住戸が払う合計</strong>（DE棟+団地）</td><td class="r"><strong>約${yen(pam.deResident.first)}/月</strong></td><td class="r"><strong>約${yen(pam.deResident.last)}/月</strong></td><td>DE棟住民の実負担</td></tr>
     </tbody>
   </table>
-  <div class="box"><p style="margin:0">棟別会計（ABC棟・DE棟）は各棟の修繕にのみ使えます。団地会計は全372戸共通の共用設備（外構・機械式駐車場等）に使用します。DE棟は大規模修繕が2035年（ABC棟の1年後）で設備更新費が多く、最終的にABC棟より高くなります。</p></div>`
+  <div class="box"><p style="margin:0">棟別会計（ABC棟・DE棟）は各棟の修繕にのみ使えます。団地会計は全372戸共通の共用設備（外構・機械式駐車場等）に使用します。DE棟は大規模修繕が2035年（ABC棟の1年後）で設備更新費が多く、最終的にABC棟より高くなります。</p></div>
+  <div class="box"><p style="margin:0">※ DE住戸合計のみ2年連続で上がる年があります。団地会計の改定年は2028/33/38/43年、DE棟会計の改定年は2029/34/39/44年（DE棟は引渡しが1年遅く経年基準が2024年のため1年ずれ）。DE住戸は「団地分＋DE棟分」の合計を払うため、両者の改定年が別々に効いて2年連続で上がります（ABC住戸は改定年が一致するため1回のみ）。</p></div>`
 
 // ---- HTML ----
 const html = `<!doctype html>
@@ -348,6 +386,7 @@ const html = `<!doctype html>
   .ok { color: #059669; }
   tr.hl { background: #ecfeff; }
   tr.hl td { font-weight: 600; }
+  td.hl { background: #d1fae5; font-weight: 600; }
   .box { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px 12px; margin: 8px 0; }
   .warn { background: #fef2f2; border-color: #fecaca; }
   ul { margin: 4px 0 4px 18px; padding: 0; }
@@ -413,11 +452,15 @@ const html = `<!doctype html>
   <p>資金ショートを解消するために必要な戸あたり月額の引き上げ額と、すまい・る債運用による節約額の試算です。</p>
   ${requiredIncreaseHtml}
 
-  <h2>8. 棟別の毎月の修繕積立金</h2>
+  <h2>8. 資金ショート解消の見通し（積立引き上げ × すまい・る債）</h2>
+  <p>積立金の引き上げ額（戸あたり月額）ごとに、資金ショートが解消するかを「運用なし」と「すまい・る債あり（現在の口数・継続運用設定）」で比較します。緑背景＝各列で最初にショートが解消される水準。</p>
+  ${shortfallMatrixHtml(data)}
+
+  <h2>9. 棟別の毎月の修繕積立金</h2>
   <p>各会計の戸あたり平均月額（積立金収入÷戸数÷12）の初年度・最終年度と、住戸が実際に払う合計（棟別＋団地）の比較です。</p>
   ${perAccountMonthlyHtml}
 
-  <h2>9. 最新の利率・金利情勢に関する所見</h2>
+  <h2>10. 最新の利率・金利情勢に関する所見</h2>
   ${commentaryHtml}
 
   <div class="foot">

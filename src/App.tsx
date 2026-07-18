@@ -24,7 +24,14 @@ import {
   serializeConfig,
 } from './engine/io'
 import { yen2man, pct } from './ui/format'
-import { findOptimalUnits, requiredMonthlyIncrease, evaluatePlan, PlanEvalResult } from './engine/report'
+import {
+  findOptimalUnits,
+  requiredMonthlyIncrease,
+  evaluatePlan,
+  PlanEvalResult,
+  computeShortfallMatrix,
+  SHORTFALL_MATRIX_LEVELS,
+} from './engine/report'
 
 const CSV_KIND_LABEL: Record<CsvKind, string> = {
   reserveSteps: '段階増額計画',
@@ -231,6 +238,12 @@ export default function App() {
     }
     return requiredMonthlyIncrease(input, scenario, noBondStrategy)
   }, [input, scenario, strategy])
+
+  // 資金ショート解消マトリクス（積立引き上げ5水準 × 運用なし/すまい・る債あり）
+  const shortfallMatrix = useMemo(
+    () => computeShortfallMatrix(input, scenario, strategy),
+    [input, scenario, strategy]
+  )
 
   // 実装3: 棟別の月額推移データ（年次）
   const perAccountMonthlyData = useMemo(() => {
@@ -784,6 +797,116 @@ export default function App() {
             </div>
           </Panel>
 
+          {/* 資金ショート解消マトリクス */}
+          <Panel title="資金ショート解消の見通し（積立引き上げ × すまい・る債）">
+            <p className="text-xs text-slate-500 -mt-1">
+              現在の前提（シナリオ「{scenario.name}」・物価上昇率 {pct(input.inflationRate * 100)}/年）で、
+              積立金の引き上げ額（戸あたり月額）ごとに、資金ショートが解消するかを「運用なし」と「すまい・る債あり（現在の口数・継続運用設定）」で比較します。
+            </p>
+            {shortfallMatrix.noShortfallAtBaseline ? (
+              <p className="text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 rounded p-2">
+                現在の前提では資金ショートは発生しません（物価上昇率を上げると必要な引き上げが見えます）。
+              </p>
+            ) : (
+              <>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs border-collapse">
+                    <thead>
+                      <tr className="bg-slate-100 text-slate-600">
+                        <th className="px-2 py-1.5 text-left font-medium border-b border-slate-200">
+                          引き上げ額（戸あたり月額）
+                        </th>
+                        <th className="px-2 py-1.5 text-center font-medium border-b border-slate-200">
+                          運用なし
+                        </th>
+                        <th className="px-2 py-1.5 text-center font-medium border-b border-slate-200">
+                          すまい・る債あり（現在の設定）
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {SHORTFALL_MATRIX_LEVELS.map((lvl, i) => {
+                        const noBondCell = shortfallMatrix.noBond[i]
+                        const withBondCell = shortfallMatrix.withBond[i]
+                        const isFirstNoBond = shortfallMatrix.firstResolvedNoBond === lvl
+                        const isFirstWithBond = shortfallMatrix.firstResolvedWithBond === lvl
+                        return (
+                          <tr key={lvl} className="odd:bg-white even:bg-slate-50">
+                            <td className="px-2 py-1.5 border-b border-slate-100 font-medium text-slate-700 whitespace-nowrap">
+                              {lvl === 0 ? '+0円/月（現行）' : `+${lvl.toLocaleString()}円/月`}
+                            </td>
+                            <td
+                              className={`px-2 py-1.5 border-b border-slate-100 text-center ${
+                                isFirstNoBond ? 'bg-emerald-100' : ''
+                              }`}
+                            >
+                              {noBondCell.shortfallYear ? (
+                                <span className="text-red-600 font-medium">
+                                  {noBondCell.shortfallYear}年に不足
+                                </span>
+                              ) : (
+                                <span className="text-emerald-700 font-medium">✅ 解消</span>
+                              )}
+                              <div className="text-[10px] text-slate-400">
+                                最低残高 {yen2man(noBondCell.minBalance.value)}（{noBondCell.minBalance.year}年）
+                              </div>
+                            </td>
+                            <td
+                              className={`px-2 py-1.5 border-b border-slate-100 text-center ${
+                                isFirstWithBond ? 'bg-emerald-100' : ''
+                              }`}
+                            >
+                              {withBondCell.shortfallYear ? (
+                                <span className="text-red-600 font-medium">
+                                  {withBondCell.shortfallYear}年に不足
+                                </span>
+                              ) : (
+                                <span className="text-emerald-700 font-medium">✅ 解消</span>
+                              )}
+                              <div className="text-[10px] text-slate-400">
+                                最低残高 {yen2man(withBondCell.minBalance.value)}（{withBondCell.minBalance.year}年）
+                              </div>
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+                <p className="text-xs text-slate-600 mt-2">
+                  運用なしでは{' '}
+                  {shortfallMatrix.requiredNoBond > 0 ? (
+                    <strong>+{shortfallMatrix.requiredNoBond.toLocaleString()}円/戸月</strong>
+                  ) : (
+                    'なし'
+                  )}{' '}
+                  が必要 → すまい・る債運用ありなら{' '}
+                  {shortfallMatrix.requiredWithBond > 0 ? (
+                    <strong>+{shortfallMatrix.requiredWithBond.toLocaleString()}円/戸月</strong>
+                  ) : (
+                    'なし'
+                  )}{' '}
+                  で解消
+                  {shortfallMatrix.requiredNoBond > shortfallMatrix.requiredWithBond && (
+                    <>
+                      （
+                      <span className="text-sky-700 font-semibold">
+                        ▲{(shortfallMatrix.requiredNoBond - shortfallMatrix.requiredWithBond).toLocaleString()}
+                        円/戸月の節約
+                      </span>
+                      ）
+                    </>
+                  )}
+                  。
+                </p>
+              </>
+            )}
+            <p className="text-[11px] text-slate-400">
+              現在の設定（シナリオ・物価上昇率）を前提とした試算です。表の「引き上げ額」は各水準を独立に試算しており（左パネルの「積立金の引き上げ」設定とは別）、上乗せ開始年度は
+              {shortfallMatrix.fromYear}年です。
+            </p>
+          </Panel>
+
           {/* すまい・る債 運用プラン比較（3案） */}
           <Panel title="すまい・る債 運用プラン比較（堅実／標準／積極）">
             <p className="text-xs text-slate-500 -mt-1">
@@ -938,6 +1061,9 @@ export default function App() {
               棟別会計（ABC棟・DE棟）は各棟の修繕にのみ使用でき、団地会計は全372戸共通の共用設備（外構・機械式駐車場等）に使用。
               DE棟は大規模修繕が2年遅れ（2035年）かつ設備更新が多く、最終的にABC棟より高くなります。
               {boostPerUnitMonth > 0 && `（「積立金の引き上げ」+${boostPerUnitMonth.toLocaleString()}円/月は${boostFromYear}年以降 住戸合計に反映）`}
+            </p>
+            <p className="text-[11px] text-slate-400">
+              ※ DE住戸合計のみ2年連続で上がる年があります。団地会計の改定年は2028/33/38/43年、DE棟会計の改定年は2029/34/39/44年で、DE棟は引渡しが1年遅く経年基準が2024年のため1年ずれています。DE住戸は「団地分＋DE棟分」の合計を払うため、団地分（2028年等）とDE棟分（2029年等）の改定が別々に効いて2年連続で上がります（ABC住戸は団地・ABC棟とも改定年が一致するため1回のみ）。
             </p>
           </Panel>
 

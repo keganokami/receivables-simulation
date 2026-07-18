@@ -1,5 +1,12 @@
 import { describe, it, expect } from 'vitest'
-import { findOptimalUnits, requiredMonthlyIncrease, buildReportData, evaluatePlan } from './report'
+import {
+  findOptimalUnits,
+  requiredMonthlyIncrease,
+  buildReportData,
+  evaluatePlan,
+  computeShortfallMatrix,
+  SHORTFALL_MATRIX_LEVELS,
+} from './report'
 import { GEO_SAITO_COMBINED, GEO_SAITO_STRATEGY } from './geoSaito'
 import { RATE_SCENARIOS } from './scenarios'
 import { AssociationInput, BondStrategy, RateScenario } from './types'
@@ -575,5 +582,122 @@ describe('buildReportData plans（3案比較）', () => {
   it('物価2%シナリオでも plans が返る', () => {
     const data2 = buildReportData({ ...GEO_SAITO_COMBINED, inflationRate: 0.02 }, GEO_SAITO_STRATEGY, 1)
     expect(data2.plans.length).toBeGreaterThanOrEqual(1)
+  })
+})
+
+// ============================================================
+// computeShortfallMatrix テスト
+// ============================================================
+
+describe('computeShortfallMatrix', () => {
+  it('物価0%（実データ既定）では現行のまま資金ショートが発生しない（noShortfallAtBaseline=true）', () => {
+    const result = computeShortfallMatrix(
+      { ...GEO_SAITO_COMBINED, inflationRate: 0 },
+      standard,
+      GEO_SAITO_STRATEGY
+    )
+    expect(result.noShortfallAtBaseline).toBe(true)
+    expect(result.requiredNoBond).toBe(0)
+    expect(result.requiredWithBond).toBe(0)
+    // 0円/月の行では両列ともショートなし
+    expect(result.noBond[0].shortfallYear).toBeNull()
+    expect(result.withBond[0].shortfallYear).toBeNull()
+  })
+
+  it('noBond・withBond は SHORTFALL_MATRIX_LEVELS と同じ長さ・同じ水準を持つ', () => {
+    const result = computeShortfallMatrix(GEO_SAITO_COMBINED, standard, GEO_SAITO_STRATEGY)
+    expect(result.noBond.length).toBe(SHORTFALL_MATRIX_LEVELS.length)
+    expect(result.withBond.length).toBe(SHORTFALL_MATRIX_LEVELS.length)
+    expect(result.noBond.map((c) => c.perUnitMonth)).toEqual([...SHORTFALL_MATRIX_LEVELS])
+    expect(result.withBond.map((c) => c.perUnitMonth)).toEqual([...SHORTFALL_MATRIX_LEVELS])
+  })
+
+  it('物価2%ストレスでは、より高い引き上げ水準の方がショートが解消しやすい（単調性）', () => {
+    const result = computeShortfallMatrix(
+      { ...GEO_SAITO_COMBINED, inflationRate: 0.02 },
+      standard,
+      GEO_SAITO_STRATEGY
+    )
+    // ショートする場合、ショート年は引き上げ水準が上がるほど遅くなる（＝改善する）はず
+    const noBondYears = result.noBond.map((c) => c.shortfallYear)
+    for (let i = 1; i < noBondYears.length; i++) {
+      if (noBondYears[i] !== null && noBondYears[i - 1] !== null) {
+        expect(noBondYears[i]!).toBeGreaterThanOrEqual(noBondYears[i - 1]!)
+      }
+    }
+  })
+
+  it('すまい・る債あり列は運用なし列以上に有利（同じ引き上げ水準で最低残高が高い、またはショートが解消/後ろ倒し）', () => {
+    const result = computeShortfallMatrix(
+      { ...GEO_SAITO_COMBINED, inflationRate: 0.02 },
+      standard,
+      GEO_SAITO_STRATEGY
+    )
+    for (let i = 0; i < SHORTFALL_MATRIX_LEVELS.length; i++) {
+      expect(result.withBond[i].minBalance.value).toBeGreaterThanOrEqual(result.noBond[i].minBalance.value)
+    }
+  })
+
+  it('requiredNoBond >= requiredWithBond（運用ありの方が必要な引き上げが少ないか同じ）', () => {
+    const result = computeShortfallMatrix(
+      { ...GEO_SAITO_COMBINED, inflationRate: 0.02 },
+      standard,
+      GEO_SAITO_STRATEGY
+    )
+    expect(result.requiredNoBond).toBeGreaterThanOrEqual(result.requiredWithBond)
+  })
+
+  it('firstResolvedNoBond / firstResolvedWithBond は shortfallYear=null の最小水準と一致する', () => {
+    const result = computeShortfallMatrix(
+      { ...GEO_SAITO_COMBINED, inflationRate: 0.01 },
+      standard,
+      GEO_SAITO_STRATEGY
+    )
+    const expectedNoBond = result.noBond.find((c) => c.shortfallYear === null)?.perUnitMonth ?? null
+    const expectedWithBond = result.withBond.find((c) => c.shortfallYear === null)?.perUnitMonth ?? null
+    expect(result.firstResolvedNoBond).toBe(expectedNoBond)
+    expect(result.firstResolvedWithBond).toBe(expectedWithBond)
+  })
+
+  it('input に既存の reserveBoost が設定されていても、+0行はそれを無視する（reserveBoostなし扱い）', () => {
+    const boosted = { ...GEO_SAITO_COMBINED, inflationRate: 0.02, reserveBoost: { fromYear: 2026, addAnnual: 100_000_000 } }
+    const withoutBoost = { ...GEO_SAITO_COMBINED, inflationRate: 0.02 }
+    const resultBoosted = computeShortfallMatrix(boosted, standard, GEO_SAITO_STRATEGY)
+    const resultPlain = computeShortfallMatrix(withoutBoost, standard, GEO_SAITO_STRATEGY)
+    // +0行の結果は、入力に既存boostがあってもなくても同じ（独立試算のため）
+    expect(resultBoosted.noBond[0].shortfallYear).toBe(resultPlain.noBond[0].shortfallYear)
+    expect(resultBoosted.withBond[0].shortfallYear).toBe(resultPlain.withBond[0].shortfallYear)
+  })
+
+  it('fromYear は input.reserveBoost.fromYear があればそれを、なければ startYear を使う', () => {
+    const result1 = computeShortfallMatrix(GEO_SAITO_COMBINED, standard, GEO_SAITO_STRATEGY)
+    expect(result1.fromYear).toBe(GEO_SAITO_COMBINED.startYear)
+
+    const withCustomFromYear = { ...GEO_SAITO_COMBINED, reserveBoost: { fromYear: 2033, addAnnual: 0 } }
+    const result2 = computeShortfallMatrix(withCustomFromYear, standard, GEO_SAITO_STRATEGY)
+    expect(result2.fromYear).toBe(2033)
+  })
+})
+
+// ============================================================
+// buildReportData の shortfallMatrix フィールドのテスト
+// ============================================================
+
+describe('buildReportData shortfallMatrix', () => {
+  it('shortfallMatrix が computeShortfallMatrix と同じ値を返す', () => {
+    const data = buildReportData({ ...GEO_SAITO_COMBINED, inflationRate: 0.02 }, GEO_SAITO_STRATEGY, 1)
+    const direct = computeShortfallMatrix(
+      { ...GEO_SAITO_COMBINED, inflationRate: 0.02 },
+      standard,
+      GEO_SAITO_STRATEGY
+    )
+    expect(data.shortfallMatrix.requiredNoBond).toBe(direct.requiredNoBond)
+    expect(data.shortfallMatrix.requiredWithBond).toBe(direct.requiredWithBond)
+    expect(data.shortfallMatrix.noShortfallAtBaseline).toBe(direct.noShortfallAtBaseline)
+  })
+
+  it('物価0%の既定データでは shortfallMatrix.noShortfallAtBaseline = true', () => {
+    const data = buildReportData(GEO_SAITO_COMBINED, GEO_SAITO_STRATEGY, 1)
+    expect(data.shortfallMatrix.noShortfallAtBaseline).toBe(true)
   })
 })

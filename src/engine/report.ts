@@ -206,6 +206,10 @@ export interface ReportData {
     /** DE住戸合計（DE棟+団地）の初年度・最終年度 */
     deResident: { first: number; last: number }
   }
+  /**
+   * 追加4: 資金ショート解消マトリクス（積立引き上げ × すまい・る債の有無）
+   */
+  shortfallMatrix: ShortfallMatrixResult
 }
 
 const BIG_WORK_THRESHOLD = 50_000_000
@@ -412,6 +416,9 @@ export function buildReportData(
   const deFirstYearMonthly = Math.round(annualOf(deAcc.reserveAnnualSteps, input.startYear) / deAcc.units / 12)
   const deLastYearMonthly = Math.round(annualOf(deAcc.reserveAnnualSteps, endYear) / deAcc.units / 12)
 
+  // ---- 追加4: 資金ショート解消マトリクス ----
+  const shortfallMatrix = computeShortfallMatrix(input, scenario, strategy)
+
   // ---- reserveBoost の情報 ----
   const reserveBoostMeta = input.reserveBoost && input.reserveBoost.addAnnual > 0
     ? {
@@ -470,6 +477,7 @@ export function buildReportData(
         last: deLastYearMonthly + danchiLastYearMonthly,
       },
     },
+    shortfallMatrix,
   }
 }
 
@@ -567,4 +575,93 @@ export function requiredMonthlyIncrease(
   }
 
   return lo
+}
+
+// ============================================================================
+// computeShortfallMatrix
+// 積立金の引き上げ額（戸あたり月額）× すまい・る債の有無 のマトリクスで、
+// 資金ショートが解消するかどうかを一覧できるようにする。
+// ============================================================================
+
+/** マトリクスの行（引き上げ額・円/戸月）。+0 は現行のまま（引き上げなし）。 */
+export const SHORTFALL_MATRIX_LEVELS = [0, 1000, 2000, 3000, 5000, 8000] as const
+
+export interface ShortfallMatrixCell {
+  perUnitMonth: number
+  shortfallYear: number | null
+  minBalance: { value: number; year: number }
+}
+
+export interface ShortfallMatrixResult {
+  /** 引き上げの適用開始年度 */
+  fromYear: number
+  /** 運用なし列（5水準） */
+  noBond: ShortfallMatrixCell[]
+  /** すまい・る債あり列（現在の口数・継続運用設定、5水準） */
+  withBond: ShortfallMatrixCell[]
+  /** 運用なし列で最初にショートが解消される水準（円/戸月）。どの水準でも解消しなければ null */
+  firstResolvedNoBond: number | null
+  /** すまい・る債あり列で最初にショートが解消される水準（円/戸月）。どの水準でも解消しなければ null */
+  firstResolvedWithBond: number | null
+  /** 資金ショート解消に必要な戸あたり月額引き上げ（運用なし・厳密値。requiredMonthlyIncrease と同じロジック） */
+  requiredNoBond: number
+  /** 資金ショート解消に必要な戸あたり月額引き上げ（運用あり・厳密値） */
+  requiredWithBond: number
+  /** 現在の前提（引き上げ0円・運用なし）で、そもそも資金ショートが発生しないか */
+  noShortfallAtBaseline: boolean
+}
+
+/**
+ * 積立金の引き上げ額（戸あたり月額・SHORTFALL_MATRIX_LEVELS の5水準）×
+ * 「運用なし」「すまい・る債あり（現在の設定）」の2列で、資金ショートの有無と最低残高を一覧化する。
+ * input が保持する既存の reserveBoost は無視し、水準ごとに reserveBoost を独立して設定して試算する
+ * （+0 の行は reserveBoost なし＝現行の段階増額計画のまま）。
+ */
+export function computeShortfallMatrix(
+  input: AssociationInput,
+  scenario: RateScenario,
+  strategy: BondStrategy
+): ShortfallMatrixResult {
+  const fromYear = input.reserveBoost?.fromYear ?? input.startYear
+  const cleanInput: AssociationInput = { ...input, reserveBoost: undefined }
+  const noBondStrategy: BondStrategy = {
+    enabled: false,
+    startYear: strategy.startYear,
+    unitsPerYear: 0,
+    purchaseYears: 0,
+    allowEarlyRedemption: false,
+  }
+
+  function evalLevel(perUnitMonth: number, strat: BondStrategy): ShortfallMatrixCell {
+    const boostedInput: AssociationInput =
+      perUnitMonth > 0
+        ? { ...cleanInput, reserveBoost: { fromYear, addAnnual: perUnitMonth * input.units * 12 } }
+        : cleanInput
+    const res = simulate(boostedInput, scenario, strat)
+    return {
+      perUnitMonth,
+      shortfallYear: res.firstShortfallYear,
+      minBalance: minBalance(res),
+    }
+  }
+
+  const noBond = SHORTFALL_MATRIX_LEVELS.map((lvl) => evalLevel(lvl, noBondStrategy))
+  const withBond = SHORTFALL_MATRIX_LEVELS.map((lvl) => evalLevel(lvl, strategy))
+
+  const firstResolvedNoBond = noBond.find((c) => c.shortfallYear === null)?.perUnitMonth ?? null
+  const firstResolvedWithBond = withBond.find((c) => c.shortfallYear === null)?.perUnitMonth ?? null
+
+  const requiredNoBond = requiredMonthlyIncrease(cleanInput, scenario, noBondStrategy)
+  const requiredWithBond = requiredMonthlyIncrease(cleanInput, scenario, strategy)
+
+  return {
+    fromYear,
+    noBond,
+    withBond,
+    firstResolvedNoBond,
+    firstResolvedWithBond,
+    requiredNoBond,
+    requiredWithBond,
+    noShortfallAtBaseline: requiredNoBond === 0,
+  }
 }
