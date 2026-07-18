@@ -14,7 +14,7 @@ import {
 import { simulate, simulateWithoutBond } from './engine/simulate'
 import { RATE_SCENARIOS } from './engine/scenarios'
 import { GEO_SAITO_COMBINED, GEO_SAITO_STRATEGY, ACCOUNTS } from './engine/geoSaito'
-import { AssociationInput, BondStrategy } from './engine/types'
+import { AssociationInput, BondStrategy, BOND_UNIT_YEN } from './engine/types'
 import {
   CSV_TEMPLATES,
   CsvKind,
@@ -39,6 +39,7 @@ export default function App() {
 
   const [ioStatus, setIoStatus] = useState<{ ok: boolean; msg: string } | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
+  const [showBondModal, setShowBondModal] = useState(false)
 
   const scenario = RATE_SCENARIOS[scenarioIdx]
 
@@ -149,6 +150,44 @@ export default function App() {
     () => findOptimalUnits(input, scenario, strategy.reissue ?? false),
     [input, scenario, strategy.reissue]
   )
+
+  // 口数バリデーション: 制度上の購入上限（その年の修繕積立金収入 ＋ 前年度末の修繕積立金残高）÷ 50万円
+  const purchaseLimitInfo = useMemo(() => {
+    const year = strategy.startYear
+    let annualReserve: number
+    if (input.reserveAnnualSteps && input.reserveAnnualSteps.length > 0) {
+      let v = 0
+      let best = -Infinity
+      for (const s of input.reserveAnnualSteps) {
+        if (s.fromYear <= year && s.fromYear > best) {
+          best = s.fromYear
+          v = s.annual
+        }
+      }
+      annualReserve = v
+    } else {
+      let monthly = 0
+      let best = -Infinity
+      for (const s of input.reserveSteps) {
+        if (s.fromYear <= year && s.fromYear > best) {
+          best = s.fromYear
+          monthly = s.monthlyPerUnit
+        }
+      }
+      annualReserve = monthly * input.units * 12
+    }
+    if (input.reserveBoost && input.reserveBoost.addAnnual !== 0 && year >= input.reserveBoost.fromYear) {
+      annualReserve += input.reserveBoost.addAnnual
+    }
+    const priorBalance = input.openingBalance
+    const limitUnits = Math.floor((annualReserve + priorBalance) / BOND_UNIT_YEN)
+    return { annualReserve, priorBalance, limitUnits }
+  }, [input, strategy.startYear])
+
+  // 口数バリデーション: 実際の購入実績（シミュレーション結果から）
+  const actualFirstYearUnits =
+    withBond.rows.length > 0 ? Math.round(withBond.rows[0].bondPurchase / BOND_UNIT_YEN) : 0
+  const actualPurchaseYears = withBond.rows.filter((r) => r.bondPurchase > 0).length
 
   // すまい・る債 運用プラン比較（3案）
   const bondPlans = useMemo((): PlanEvalResult[] => {
@@ -417,6 +456,13 @@ export default function App() {
           </Panel>
 
           <Panel title="すまい・る債の運用">
+            <button
+              type="button"
+              className="w-full border border-sky-300 text-sky-700 hover:bg-sky-50 rounded-md py-1.5 text-xs"
+              onClick={() => setShowBondModal(true)}
+            >
+              📋 すまい・る債の制度詳細
+            </button>
             <label className="flex items-center gap-2 text-sm mb-2">
               <input
                 type="checkbox"
@@ -432,6 +478,20 @@ export default function App() {
             />
             <p className="text-xs text-slate-500 -mt-2">
               = 年 {yen2man(strategy.unitsPerYear * 500_000)} の積立
+            </p>
+            <p className="text-[11px] text-slate-500 -mt-2">
+              制度上の購入上限：約{purchaseLimitInfo.limitUnits.toLocaleString()}口/年
+              （年間修繕積立金 {yen2man(purchaseLimitInfo.annualReserve)} ＋ 前年度末残高{' '}
+              {yen2man(purchaseLimitInfo.priorBalance)}）
+            </p>
+            {strategy.unitsPerYear > purchaseLimitInfo.limitUnits && (
+              <div className="p-2 bg-red-50 border border-red-300 rounded text-xs text-red-700">
+                ⚠️ 制度上限（{purchaseLimitInfo.limitUnits.toLocaleString()}口）を超えています。実際には上限までしか購入されないため、これ以上増やしても結果は変わりません。
+              </div>
+            )}
+            <p className="text-[11px] text-slate-500 -mt-2">
+              実際の購入：初年度 {actualFirstYearUnits.toLocaleString()}口（
+              {yen2man(actualFirstYearUnits * BOND_UNIT_YEN)}）／ 継続 {actualPurchaseYears}年
             </p>
             <NumField
               label="購入開始年度（西暦）"
@@ -992,6 +1052,8 @@ export default function App() {
         </main>
       </div>
 
+      {showBondModal && <BondInfoModal onClose={() => setShowBondModal(false)} />}
+
       <style>{`
         .input { width:100%; border:1px solid #cbd5e1; border-radius:6px; padding:6px 8px; font-size:14px; }
         .input:focus { outline:2px solid #0ea5e9; border-color:#0ea5e9; }
@@ -1010,6 +1072,148 @@ function Panel({ title, children }: { title: string; children: ReactNode }) {
       <h2 className="font-semibold text-slate-700 mb-3 text-sm">{title}</h2>
       <div className="space-y-3">{children}</div>
     </section>
+  )
+}
+
+function BondInfoModal({ onClose }: { onClose: () => void }) {
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') onClose()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onClose])
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+      onClick={onClose}
+    >
+      <div
+        className="bg-white rounded-xl shadow-lg max-w-2xl w-full max-h-[85vh] overflow-y-auto p-5"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex justify-between items-start mb-3 sticky top-0 bg-white">
+          <h3 className="text-base font-semibold text-slate-800">
+            マンションすまい・る債の制度詳細
+          </h3>
+          <button
+            type="button"
+            className="text-slate-400 hover:text-slate-600 text-xl leading-none px-2"
+            onClick={onClose}
+            aria-label="閉じる"
+          >
+            ×
+          </button>
+        </div>
+
+        <div className="space-y-4 text-sm text-slate-700">
+          <ModalSection title="購入単位・継続">
+            <li>1口50万円の利付10年債。10年満期、年1回利息受取。</li>
+            <li>継続購入：応募時に届け出た口数を毎年、最大10回まで積立可能（1回のみの購入も可）。</li>
+            <li>継続は毎年同一口数。購入した口数の分割・変更は不可。</li>
+            <li>口数の増額・減額、中断後の再開、10回終了後の再開は、いずれも新規応募が必要。</li>
+          </ModalSection>
+
+          <ModalSection title="購入上限（管理組合ごと）">
+            <li>
+              原則、「マンション全体の1年あたりの修繕積立金額」＋「前年度決算における修繕積立金会計の残高（借入金額を除く）」の合計金額の範囲内。
+            </li>
+            <li>
+              応募パターン：①1年間に集まる修繕積立金額の範囲内で毎年同一口数を継続、②それに加えて既に貯まっている修繕積立金額の範囲内で応募。
+            </li>
+          </ModalSection>
+
+          <ModalSection title="募集枠・応募期間（2026年度）">
+            <li>
+              応募受付：2026年4月13日〜10月9日。先着順で、募集口数に達した時点で受付終了（超過日の前日に前倒し）。
+            </li>
+            <li>2026年度の募集口数：582,089口（総額2,910億4,450万円）※通常・ステップアップ・認定の合計。</li>
+          </ModalSection>
+
+          <ModalSection title="利率（2026年度・10年満期時 年平均利率／税引前）">
+            <li>通常 2.000% ／ ステップアップ 2.050% ／ 認定（管理計画認定マンション）2.100%</li>
+            <li>利率は毎年度、住宅金融支援機構が決定。</li>
+          </ModalSection>
+
+          <ModalSection title="応募資格・要件">
+            <li>管理組合・管理組合法人のみ（個人・法人は不可）。</li>
+            <li>分譲マンションが対象（賃貸マンションは対象外／沖縄県内のマンションは対象外）。</li>
+            <li>
+              長期修繕計画の計画期間が20年以上（20年の起点は「計画を策定した時点」であり応募時点ではない）。
+            </li>
+            <li>反社会的勢力と関係がないこと。</li>
+            <li>
+              将来的に共用部分リフォーム融資の申込みを検討している管理組合が対象（結果的に融資を受けなくても違約金等はなし）。
+            </li>
+            <li>
+              総会決議は応募要件ではないが、修繕積立金の運用方法が管理規約に規定されている場合があるため事前確認が必要。
+            </li>
+          </ModalSection>
+
+          <ModalSection title="中途換金">
+            <li>
+              初回債券発行日から1年以上経過すれば、手数料なしで1口単位で中途換金が可能（修繕工事等のため）。やむを得ない事情があれば1年未満でも可能な場合あり。
+            </li>
+            <li>
+              保有残高の範囲内で一部・全部の換金が可能、複数回に分けることも可（同じ月に換金できるのは1回のみ）。
+            </li>
+            <li>
+              換金額は1口あたり50万円＋経過利息。ただし発行から2か月以内の債券、買入代金の支払日が満期日と同じ月になる債券は除く。
+            </li>
+          </ModalSection>
+
+          <div>
+            <p className="text-xs font-semibold text-slate-600 mb-1">出典リンク</p>
+            <ul className="text-xs text-sky-700 space-y-0.5 list-disc list-inside">
+              <li>
+                <a
+                  href="https://www.jhf.go.jp/kanri/smile/index.html"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="underline hover:text-sky-900"
+                >
+                  住宅金融支援機構 マンションすまい・る債
+                </a>
+              </li>
+              <li>
+                <a
+                  href="https://www.jhf.go.jp/kanri/smile/bosyu/index.html"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="underline hover:text-sky-900"
+                >
+                  募集案内
+                </a>
+              </li>
+              <li>
+                <a
+                  href="https://jhffaq.jp/jhffaq/jhf/web/listByCategory_smile.html"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="underline hover:text-sky-900"
+                >
+                  よくある質問
+                </a>
+              </li>
+            </ul>
+          </div>
+
+          <p className="text-[11px] text-slate-400 border-t border-slate-200 pt-2">
+            本アプリのシミュレーションは、上記のうち「1口50万円・年1回・最大10回・同一口数継続・購入上限・発行1年後の中途換金」をモデル化しています。応募資格や募集枠（先着）はモデル化していません。
+          </p>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function ModalSection({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <div>
+      <p className="text-xs font-semibold text-slate-600 mb-1">{title}</p>
+      <ul className="text-xs text-slate-600 space-y-0.5 list-disc list-inside">{children}</ul>
+    </div>
   )
 }
 
