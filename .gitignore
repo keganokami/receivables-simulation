@@ -1,0 +1,12 @@
+node_modules
+dist
+*.local
+.DS_Store
+
+# 機微な原典資料・生成物はコミットしない（実在物件の財務データ）
+*.pdf
+*.PDF
+reports/
+
+# TypeScript build info
+tsconfig.tsbuildinfo
