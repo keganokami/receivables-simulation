@@ -304,7 +304,7 @@ export default function App() {
               step={1_000_000}
               onChange={(v) => setInput({ ...input, openingBalance: v })}
             />
-            <Field label={`修繕費の物価上昇率: ${pct(input.inflationRate * 100)}`}>
+            <Field label={`修繕費の物価上昇率: ${pct(input.inflationRate * 100)}/年`}>
               <input
                 type="range"
                 min={0}
@@ -316,6 +316,35 @@ export default function App() {
                 }
                 className="w-full"
               />
+              <div className="flex gap-1 mt-1">
+                {[
+                  { v: 0, label: '0%' },
+                  { v: 1, label: '1%' },
+                  { v: 2, label: '2%' },
+                  { v: 2.6, label: '2.6%' },
+                  { v: 3, label: '3%' },
+                ].map((p) => (
+                  <button
+                    key={p.v}
+                    className={`flex-1 text-xs rounded px-1 py-1 border ${
+                      Math.abs(input.inflationRate * 100 - p.v) < 0.05
+                        ? 'bg-sky-600 text-white border-sky-600'
+                        : 'border-slate-300 hover:bg-slate-50'
+                    }`}
+                    onClick={() => setInput({ ...input, inflationRate: p.v / 100 })}
+                  >
+                    {p.label}
+                  </button>
+                ))}
+              </div>
+              <div className="text-[11px] text-slate-500 mt-1 space-y-0.5">
+                <div><strong>目安（建設工事費の実績）:</strong></div>
+                <div>・<strong>0%</strong>＝計画書のまま（物価変動を見込まない）</div>
+                <div>・<strong>1〜2%</strong>＝穏やかな上昇（長期計画の一般的な前提）</div>
+                <div>・<strong>約2.6%</strong>＝建設工事費デフレーターの過去10年平均（10年で約3割上昇）</div>
+                <div>・<strong>3%以上</strong>＝資材・人件費の高騰局面（2021-22年は前年比10%超の月も／労務単価は12年連続上昇＝年約4%）</div>
+                <div className="text-slate-400">出典: 国交省 建設工事費デフレーター・公共工事設計労務単価</div>
+              </div>
             </Field>
             <label className="flex items-center gap-2 text-sm">
               <input
