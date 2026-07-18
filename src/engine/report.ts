@@ -28,13 +28,14 @@ function minBalance(res: SimulationResult): { value: number; year: number } {
   )
 }
 
-function mkStrategy(units: number, years = 10): BondStrategy {
+function mkStrategy(units: number, years = 10, reissue = false): BondStrategy {
   return {
     enabled: true,
     startYear: 2026,
     unitsPerYear: units,
     purchaseYears: years,
     allowEarlyRedemption: true,
+    reissue,
   }
 }
 
@@ -65,7 +66,8 @@ export function evaluatePlan(
   input: AssociationInput,
   scenario: RateScenario,
   unitsPerYear: number,
-  purchaseYears = 10
+  purchaseYears = 10,
+  reissue = false
 ): Omit<PlanEvalResult, 'key' | 'name' | 'purpose'> {
   const baseline = simulateWithoutBond(input, scenario)
   const res = simulate(input, scenario, {
@@ -74,6 +76,7 @@ export function evaluatePlan(
     unitsPerYear,
     purchaseYears,
     allowEarlyRedemption: true,
+    reissue,
   })
 
   // bondPurchase > 0 の年を集める
@@ -108,6 +111,8 @@ export interface ReportData {
     inflationRate: number
     /** アプリで現在選択中の すまい・る債 口数/年（0=運用なし） */
     currentUnitsPerYear: number
+    /** 再投資モード（満期後も新規発行を継続するか） */
+    reissue: boolean
     /** reserveBoost が設定されている場合の情報 */
     reserveBoost?: {
       fromYear: number
@@ -301,6 +306,7 @@ export function buildReportData(
     allVariants.sort((a, b) => a.units - b.units)
   }
 
+  const reissue = strategy.reissue ?? false
   const compBase = simulateWithoutBond(input, scenario)
   const comparison = [
     {
@@ -308,7 +314,7 @@ export function buildReportData(
       depositRate: scenario.depositRate,
       bondRateStart: scenario.bondRatesByYear[input.startYear] ?? 0,
       rows: allVariants.map((v) => {
-        const res = v.units === 0 ? compBase : simulate(input, scenario, mkStrategy(v.units, v.years))
+        const res = v.units === 0 ? compBase : simulate(input, scenario, mkStrategy(v.units, v.years, reissue))
         return {
           label: v.label,
           unitsPerYear: v.units,
@@ -334,7 +340,7 @@ export function buildReportData(
 
   // ---- プラン比較（3案） ----
   // findOptimalUnits の結果を先取りして定義する（buildReportData 内で利用）
-  const optimalUnitsForPlans = findOptimalUnits(input, scenario)
+  const optimalUnitsForPlans = findOptimalUnits(input, scenario, reissue)
   const STANDARD_UNITS = 60
   const planDefs: { key: string; name: string; purpose: string; units: number }[] = []
   // 口数の重複排除（堅実 → 標準 → 積極 の優先度で）
@@ -377,7 +383,7 @@ export function buildReportData(
     key: def.key,
     name: def.name,
     purpose: def.purpose,
-    ...evaluatePlan(input, scenario, def.units, 10),
+    ...evaluatePlan(input, scenario, def.units, 10, reissue),
   }))
 
   // ---- 追加1: 最適口数の自動試算 ----
@@ -425,6 +431,7 @@ export function buildReportData(
       scenarioName: scenario.name,
       inflationRate: input.inflationRate,
       currentUnitsPerYear: strategy.enabled ? strategy.unitsPerYear : 0,
+      reissue,
       reserveBoost: reserveBoostMeta,
     },
     bigWorks,
@@ -484,7 +491,8 @@ export interface OptimalUnitsResult {
 
 export function findOptimalUnits(
   input: AssociationInput,
-  scenario: RateScenario
+  scenario: RateScenario,
+  reissue = false
 ): OptimalUnitsResult {
   const baseline = simulateWithoutBond(input, scenario)
   const PURCHASE_YEARS = 10
@@ -500,6 +508,7 @@ export function findOptimalUnits(
       unitsPerYear: u,
       purchaseYears: PURCHASE_YEARS,
       allowEarlyRedemption: true,
+      reissue,
     })
 
     const benefit = res.endingTotal - baseline.endingTotal

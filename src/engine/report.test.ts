@@ -454,6 +454,59 @@ describe('evaluatePlan', () => {
 })
 
 // ============================================================
+// reissue（再投資モード）の ON/OFF 比較テスト
+// ============================================================
+
+describe('reissue（再投資モード）の伝播', () => {
+  // 標準シナリオ・物価0%・60口/年 で reissue OFF と ON を比較
+  const inputZero = { ...GEO_SAITO_COMBINED, inflationRate: 0 }
+  const stratOff = { ...GEO_SAITO_STRATEGY, unitsPerYear: 60, reissue: false }
+  const stratOn  = { ...GEO_SAITO_STRATEGY, unitsPerYear: 60, reissue: true }
+
+  const dataOff = buildReportData(inputZero, stratOff, 1)
+  const dataOn  = buildReportData(inputZero, stratOn,  1)
+
+  it('meta.reissue が strategy.reissue を正しく反映する', () => {
+    expect(dataOff.meta.reissue).toBe(false)
+    expect(dataOn.meta.reissue).toBe(true)
+  })
+
+  it('reissue=true の方が plans（各案）の benefit が大きい（または同等）', () => {
+    // 再投資モードは30年を通じて運用し続けるため、メリットが大きくなる傾向
+    for (const planOn of dataOn.plans) {
+      const planOff = dataOff.plans.find((p) => p.key === planOn.key)
+      if (planOff) {
+        expect(planOn.benefit).toBeGreaterThanOrEqual(planOff.benefit)
+      }
+    }
+  })
+
+  it('reissue=true の方が comparison の 80口行の benefit が大きい', () => {
+    const benefitOff = dataOff.comparison[0].rows.find((r) => r.unitsPerYear === 80)?.benefit ?? 0
+    const benefitOn  = dataOn.comparison[0].rows.find((r) => r.unitsPerYear === 80)?.benefit ?? 0
+    expect(benefitOn).toBeGreaterThan(benefitOff)
+  })
+
+  it('reissue=true の方が findOptimalUnits の optimalBenefit が大きい（または同等）', () => {
+    const resultOff = dataOff.optimalUnits
+    const resultOn  = dataOn.optimalUnits
+    expect(resultOn.optimalBenefit).toBeGreaterThanOrEqual(resultOff.optimalBenefit)
+  })
+
+  it('evaluatePlan(reissue=true) は evaluatePlan(reissue=false) より benefit が大きい（60口・30年標準シナリオ）', () => {
+    const resultOff = evaluatePlan(inputZero, standard, 60, 10, false)
+    const resultOn  = evaluatePlan(inputZero, standard, 60, 10, true)
+    expect(resultOn.benefit).toBeGreaterThan(resultOff.benefit)
+  })
+
+  it('findOptimalUnits(reissue=true) は findOptimalUnits(reissue=false) より optimalBenefit が大きい（または同等）', () => {
+    const resultOff = findOptimalUnits(inputZero, standard, false)
+    const resultOn  = findOptimalUnits(inputZero, standard, true)
+    expect(resultOn.optimalBenefit).toBeGreaterThanOrEqual(resultOff.optimalBenefit)
+  })
+})
+
+// ============================================================
 // buildReportData の plans フィールドのテスト
 // ============================================================
 

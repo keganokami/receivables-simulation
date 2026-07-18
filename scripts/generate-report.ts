@@ -164,7 +164,10 @@ const bigWorksRows = data.bigWorks
   .map((w) => `<tr><td>${w.year}年</td><td class="r">${man(w.amount)}</td><td>${esc(w.label)}</td></tr>`)
   .join('')
 
-const perAccountCaption = `シナリオ「${esc(data.meta.scenarioName)}」・物価上昇率 ${pct(data.meta.inflationRate * 100)}・すまい・る債 ${data.meta.currentUnitsPerYear}口/年 の前提で棟別に再計算`
+const reissueNote = data.meta.reissue
+  ? '・再投資モード：満期後も新規発行を継続する前提'
+  : ''
+const perAccountCaption = `シナリオ「${esc(data.meta.scenarioName)}」・物価上昇率 ${pct(data.meta.inflationRate * 100)}・すまい・る債 ${data.meta.currentUnitsPerYear}口/年${reissueNote} の前提で棟別に再計算`
 
 const perAccountRows = data.perAccount
   .map(
@@ -178,7 +181,7 @@ const perAccountRows = data.perAccount
   )
   .join('')
 
-function comparisonTable(c: ReportData['comparison'][number]): string {
+function comparisonTable(c: ReportData['comparison'][number], reissue: boolean): string {
   const rows = c.rows
     .map(
       (r) => `<tr class="${r.isCurrent ? 'hl' : ''}">
@@ -191,7 +194,7 @@ function comparisonTable(c: ReportData['comparison'][number]): string {
     )
     .join('')
   return `<h4>${esc(c.scenario)}（債券 ${pct(c.bondRateStart)}〜 / 預金 ${pct(c.depositRate)}）</h4>
-  <p class="sub">★ 現在選択中の口数。選択シナリオ「${esc(c.scenario)}」での試算。</p>
+  <p class="sub">★ 現在選択中の口数。選択シナリオ「${esc(c.scenario)}」での試算。${reissue ? '再投資モード（満期後も継続発行の前提）で算出。' : ''}</p>
   <table>
     <thead><tr><th>戦略</th><th class="r">累計利息</th><th class="r">運用メリット</th><th class="r">最低残高</th><th class="r">資金ショート</th></tr></thead>
     <tbody>${rows}</tbody>
@@ -390,7 +393,7 @@ const html = `<!doctype html>
       <li><strong>「運用メリット」＝運用ありの期末資産 −運用なしの期末資産</strong>（＝運用したことで正味いくら増えたか）。</li>
     </ul>
   </div>
-  ${data.comparison.map(comparisonTable).join('')}
+  ${data.comparison.map((c) => comparisonTable(c, data.meta.reissue)).join('')}
   <div class="box"><strong>読み取り：</strong> 継続的に運用するほど効果が大きく、いずれの戦略でも資金ショートは発生しません。<strong>80口/年（毎年4,000万円）で30年累計 ${man(data.comparison[0].rows.find((r) => r.unitsPerYear === 80)?.benefit ?? 0)}</strong> の上乗せとなり、最低残高（2035年前後の底）も押し上がります。</div>
 
   <h2>4. 合算総資産の推移（${data.meta.currentUnitsPerYear}口/年・シナリオ「${esc(data.meta.scenarioName)}」）</h2>
@@ -398,12 +401,12 @@ const html = `<!doctype html>
   <div class="legend"><b style="color:#0ea5e9">━ すまい・る債運用あり</b>　<b style="color:#94a3b8">┈ 運用なし</b>　<b style="color:#fca5a5">▮ 修繕支出</b></div>
 
   <h2>5. すまい・る債 運用プラン比較（3案）</h2>
-  <p>物件の資金状況に合わせた3案を比較します。シナリオ「${esc(data.meta.scenarioName)}」・物価上昇率 ${pct(data.meta.inflationRate * 100)} での試算。</p>
+  <p>物件の資金状況に合わせた3案を比較します。シナリオ「${esc(data.meta.scenarioName)}」・物価上昇率 ${pct(data.meta.inflationRate * 100)} での試算。${data.meta.reissue ? '<strong>再投資モード：満期後も新規発行を継続する前提（10年満期→再応募を繰り返す想定）で算出。</strong>' : ''}</p>
   ${planComparisonHtml(data)}
   ${data.meta.reserveBoost ? `<div class="box"><p style="margin:0"><strong>積立金の引き上げ設定：</strong>+${data.meta.reserveBoost.perUnitMonth.toLocaleString('ja-JP')}円/戸月（${data.meta.reserveBoost.fromYear}年〜） ／ 30年追加徴収 ${man(data.meta.reserveBoost.totalExtra)}</p></div>` : ''}
 
   <h2>6. すまい・る債 口数の目安（最適口数の自動試算）</h2>
-  <p>シミュレーションにより、この物件での口数ごとの運用メリットを自動試算した結果です。</p>
+  <p>シミュレーションにより、この物件での口数ごとの運用メリットを自動試算した結果です。${data.meta.reissue ? '<strong>再投資モード：満期後も継続発行の前提で算出。</strong>' : ''}</p>
   ${optimalUnitsHtml}
 
   <h2>7. 運用は「必要な値上げを月いくら節約するか」</h2>

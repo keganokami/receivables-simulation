@@ -144,8 +144,11 @@ export default function App() {
     }
   }, [input, scenario, strategy, withBond.endingTotal])
 
-  // 実装1: 最適口数・実質上限
-  const optimalInfo = useMemo(() => findOptimalUnits(input, scenario), [input, scenario])
+  // 実装1: 最適口数・実質上限（再投資モードを反映）
+  const optimalInfo = useMemo(
+    () => findOptimalUnits(input, scenario, strategy.reissue ?? false),
+    [input, scenario, strategy.reissue]
+  )
 
   // すまい・る債 運用プラン比較（3案）
   const bondPlans = useMemo((): PlanEvalResult[] => {
@@ -170,9 +173,9 @@ export default function App() {
       key: def.key,
       name: def.name,
       purpose: def.purpose,
-      ...evaluatePlan(input, scenario, def.units, 10),
+      ...evaluatePlan(input, scenario, def.units, 10, strategy.reissue ?? false),
     }))
-  }, [input, scenario, optimalInfo])
+  }, [input, scenario, optimalInfo, strategy.reissue])
 
   // 実装2: 必要な積立引き上げ（運用あり・なし）
   const requiredIncreaseWithBond = useMemo(
@@ -470,7 +473,12 @@ export default function App() {
             </label>
             {/* 最適口数・継続上限の表示 */}
             <div className="mt-2 p-2 bg-sky-50 border border-sky-200 rounded text-xs space-y-1">
-              <div className="text-sky-800 font-medium">この物件の口数の目安（自動試算）</div>
+              <div className="text-sky-800 font-medium">
+                この物件の口数の目安（自動試算）
+                {(strategy.reissue ?? false) && (
+                  <span className="ml-1 text-sky-600 font-normal">再投資モード：満期後も継続発行の前提</span>
+                )}
+              </div>
               <InfoRow
                 label="メリット最大（積極策）"
                 value={`約${optimalInfo.optimalUnits}口/年（+${yen2man(optimalInfo.optimalBenefit)}）`}
@@ -718,6 +726,11 @@ export default function App() {
             <p className="text-xs text-slate-500 -mt-1">
               継続購入の3案を並べて比較します。口数は毎年同一（制度ルール）で最大10年継続。自分の判断で案を選んで左パネルの口数に反映できます。
             </p>
+            {(strategy.reissue ?? false) && (
+              <p className="text-xs text-sky-700 bg-sky-50 border border-sky-200 rounded px-2 py-1">
+                再投資モード ON：満期後も新規発行を継続する前提で試算しています。
+              </p>
+            )}
             <div className="overflow-x-auto">
               <table className="w-full text-xs border-collapse">
                 <thead>
