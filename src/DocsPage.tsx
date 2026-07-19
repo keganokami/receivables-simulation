@@ -169,9 +169,61 @@ export default function DocsPage() {
               </ul>
             </SubSection>
 
+            <SubSection title="個人向け国債の適用利率の計算式（財務省）">
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs border-collapse">
+                  <thead>
+                    <tr className="bg-slate-100 text-slate-600">
+                      <Th align="left">タイプ</Th>
+                      <Th align="left">適用利率</Th>
+                      <Th align="left">基準金利</Th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {[
+                      ['変動10年', '基準金利 × 0.66', '10年固定利付国債の入札における平均落札価格を基に計算される複利利回り'],
+                      ['固定5年', '基準金利 − 0.05%', '募集期間開始日の2営業日前における期間5年の固定利付国債の想定利回り'],
+                      ['固定3年', '基準金利 − 0.03%', '募集期間開始日の2営業日前における期間3年の固定利付国債の想定利回り'],
+                    ].map((row) => (
+                      <tr key={row[0]} className="odd:bg-white even:bg-slate-50">
+                        {row.map((cell, i) => (
+                          <Td key={i} align="left" className={i === 0 ? 'font-medium text-slate-700' : ''}>
+                            {cell}
+                          </Td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <ul className="list-disc ml-5 space-y-1 mt-2">
+                <li>
+                  変動10年は「掛け算（×0.66）」のため、<strong>適用利率は基準金利を必ず下回る</strong>（基準金利2.7%なら 2.7×0.66＝約1.78%）。
+                </li>
+                <li>
+                  財務省は0.66の理由を「10年固定利付国債を今後10年間保有した場合に得られる金利収入とのバランスや、<strong>中途換金などの商品性を総合的に勘案</strong>した結果」と説明している。
+                </li>
+                <li>
+                  固定5年・固定3年は「引き算」のため、その年限の基準金利をほぼそのまま反映する。
+                </li>
+                <li>
+                  財務省は「<strong>金利が上昇する局面では、掛け算（×0.66）である変動10年よりも、引き算（−0.05%）である固定5年の方が、基準金利の上昇をより反映しやすい</strong>」としている。
+                </li>
+                <li>3タイプとも年率0.05%の最低金利保証があり、金利に上限はない。</li>
+                <li>
+                  計算例：基準金利1.50%の場合 → 変動10年 0.99% ／ 固定5年 1.45% ／ 固定3年 1.47%。
+                </li>
+                <li>
+                  平成23年6月までに発行された変動10年は「基準金利 − 0.80%」方式だったが、同年7月発行分より現行方式に変更（過去の銘柄は変更なし）。
+                </li>
+              </ul>
+            </SubSection>
+
             <Sources
               links={[
                 { href: 'https://www.mof.go.jp/jgbs/individual/kojinmuke/plus/', label: '財務省 個人向け国債プラス' },
+                { href: 'https://www.mof.go.jp/jgbs/individual/kojinmuke/main/qa/answer_qc.html', label: '財務省 個人向け国債の金利についてのFAQ' },
+                { href: 'https://www.mof.go.jp/jgbs/individual/kojinmuke/main/outline/hendou/', label: '財務省「変動10年」商品概要' },
                 { href: 'https://www.mof.go.jp/jgbs/individual/kojinmuke/shinmadohan/qa/', label: '新窓販国債 Q&A' },
                 { href: 'https://www.mof.go.jp/jgbs/individual/kojinmuke/shinmadohan/', label: '新窓販国債' },
                 { href: 'https://www.jiji.com/jc/article?k=2025050801260&g=eco', label: '時事ドットコム 関連記事' },
