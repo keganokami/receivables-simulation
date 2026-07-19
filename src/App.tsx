@@ -32,6 +32,7 @@ import {
   computeShortfallMatrix,
   SHORTFALL_MATRIX_LEVELS,
 } from './engine/report'
+import DocsPage from './DocsPage'
 
 const CSV_KIND_LABEL: Record<CsvKind, string> = {
   reserveSteps: '段階増額計画',
@@ -39,7 +40,71 @@ const CSV_KIND_LABEL: Record<CsvKind, string> = {
   otherCashflows: 'その他収支',
 }
 
+// URLハッシュ（#docs）で「資料・ノウハウ」ページを直接開けるようにする簡易ルーティング
+function getPageFromHash(): 'sim' | 'docs' {
+  return window.location.hash === '#docs' ? 'docs' : 'sim'
+}
+
 export default function App() {
+  const [page, setPage] = useState<'sim' | 'docs'>(getPageFromHash)
+
+  useEffect(() => {
+    function onHashChange() {
+      setPage(getPageFromHash())
+    }
+    window.addEventListener('hashchange', onHashChange)
+    return () => window.removeEventListener('hashchange', onHashChange)
+  }, [])
+
+  return (
+    <div className="min-h-screen bg-slate-50 text-slate-800">
+      <header className="bg-slate-800 text-white px-6 py-4 shadow">
+        <div className="max-w-7xl mx-auto flex flex-col md:flex-row md:items-center md:justify-between gap-2">
+          <div>
+            <h1 className="text-xl font-bold">修繕積立金シミュレーター</h1>
+            <p className="text-sm text-slate-300">
+              長期修繕計画にもとづくキャッシュフローと、すまい・る債運用の効果を試算します
+            </p>
+          </div>
+          <nav className="flex gap-2">
+            <TabButton active={page === 'sim'} onClick={() => (window.location.hash = '')}>
+              シミュレーター
+            </TabButton>
+            <TabButton active={page === 'docs'} onClick={() => (window.location.hash = '#docs')}>
+              📚 資料・ノウハウ
+            </TabButton>
+          </nav>
+        </div>
+      </header>
+
+      {page === 'docs' ? <DocsPage /> : <SimulatorPage />}
+    </div>
+  )
+}
+
+function TabButton({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean
+  onClick: () => void
+  children: ReactNode
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+        active ? 'bg-white text-slate-800' : 'bg-slate-700 text-slate-200 hover:bg-slate-600'
+      }`}
+    >
+      {children}
+    </button>
+  )
+}
+
+function SimulatorPage() {
   const [input, setInput] = useState<AssociationInput>(GEO_SAITO_COMBINED)
   const [strategy, setStrategy] = useState<BondStrategy>(GEO_SAITO_STRATEGY)
   const [scenarioIdx, setScenarioIdx] = useState(1)
@@ -325,14 +390,7 @@ export default function App() {
   const lastPUM = steps.length ? perUnitMonthOf(steps[steps.length - 1].annual) : 0
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-800">
-      <header className="bg-slate-800 text-white px-6 py-4 shadow">
-        <h1 className="text-xl font-bold">修繕積立金シミュレーター</h1>
-        <p className="text-sm text-slate-300">
-          長期修繕計画にもとづくキャッシュフローと、すまい・る債運用の効果を試算します
-        </p>
-      </header>
-
+    <>
       <div className="max-w-7xl mx-auto p-4 md:p-6 grid grid-cols-1 lg:grid-cols-[320px_1fr] gap-6">
         {/* ===== 操作パネル ===== */}
         <aside className="space-y-5">
@@ -1184,7 +1242,7 @@ export default function App() {
         .input { width:100%; border:1px solid #cbd5e1; border-radius:6px; padding:6px 8px; font-size:14px; }
         .input:focus { outline:2px solid #0ea5e9; border-color:#0ea5e9; }
       `}</style>
-    </div>
+    </>
   )
 }
 
