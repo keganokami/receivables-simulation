@@ -33,6 +33,7 @@ import {
   SHORTFALL_MATRIX_LEVELS,
 } from './engine/report'
 import DocsPage from './DocsPage'
+import SavingsPage from './SavingsPage'
 
 const CSV_KIND_LABEL: Record<CsvKind, string> = {
   reserveSteps: '段階増額計画',
@@ -40,13 +41,15 @@ const CSV_KIND_LABEL: Record<CsvKind, string> = {
   otherCashflows: 'その他収支',
 }
 
-// URLハッシュ（#docs）で「資料・ノウハウ」ページを直接開けるようにする簡易ルーティング
-function getPageFromHash(): 'sim' | 'docs' {
-  return window.location.hash === '#docs' ? 'docs' : 'sim'
+// URLハッシュ（#docs / #savings）でページを直接開けるようにする簡易ルーティング
+function getPageFromHash(): 'sim' | 'docs' | 'savings' {
+  if (window.location.hash === '#docs') return 'docs'
+  if (window.location.hash === '#savings') return 'savings'
+  return 'sim'
 }
 
 export default function App() {
-  const [page, setPage] = useState<'sim' | 'docs'>(getPageFromHash)
+  const [page, setPage] = useState<'sim' | 'docs' | 'savings'>(getPageFromHash)
 
   useEffect(() => {
     function onHashChange() {
@@ -70,6 +73,9 @@ export default function App() {
             <TabButton active={page === 'sim'} onClick={() => (window.location.hash = '')}>
               シミュレーター
             </TabButton>
+            <TabButton active={page === 'savings'} onClick={() => (window.location.hash = '#savings')}>
+              💰 修繕費の削減
+            </TabButton>
             <TabButton active={page === 'docs'} onClick={() => (window.location.hash = '#docs')}>
               📚 資料・ノウハウ
             </TabButton>
@@ -77,7 +83,7 @@ export default function App() {
         </div>
       </header>
 
-      {page === 'docs' ? <DocsPage /> : <SimulatorPage />}
+      {page === 'docs' ? <DocsPage /> : page === 'savings' ? <SavingsPage /> : <SimulatorPage />}
     </div>
   )
 }
