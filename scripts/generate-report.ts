@@ -382,6 +382,10 @@ const html = `<!doctype html>
   th, td { border-bottom: 1px solid #e2e8f0; padding: 4px 6px; text-align: left; }
   th { background: #f1f5f9; font-weight: 600; font-size: 11px; }
   td.r, th.r { text-align: right; }
+  table.assump { margin: 8px 0 4px; }
+  table.assump th { width: 15%; white-space: nowrap; vertical-align: top; border: 1px solid #e2e8f0; background: #f8fafc; color: #475569; padding: 5px 8px; }
+  table.assump td { width: 35%; font-size: 11.5px; vertical-align: top; border: 1px solid #e2e8f0; padding: 5px 8px; }
+  table.assump .sub { font-size: 10px; color: #94a3b8; margin-top: 2px; }
   .neg { color: #dc2626; font-weight: 700; }
   .ok { color: #059669; }
   tr.hl { background: #ecfeff; }
@@ -403,6 +407,43 @@ const html = `<!doctype html>
     <div class="kpi"><div class="l">現在の修繕積立金残高</div><div class="v">${oku(data.meta.openingBalance)}</div></div>
     <div class="kpi"><div class="l">推奨: すまい・る債</div><div class="v">${data.recommendation.unitsPerYear}口/年<span style="font-size:11px">（${man(data.recommendation.yenPerYear)}）</span></div></div>
   </div>
+
+  <h2>この試算の前提条件（入力値）</h2>
+  <table class="assump">
+    <tbody>
+      <tr>
+        <th>物価上昇率（修繕費）</th>
+        <td><strong>年 ${pct(data.meta.inflationRate * 100)}</strong>${data.meta.inflationRate === 0 ? '（長期修繕計画のまま＝物価変動を見込まない）' : `（${data.meta.priceBaseYear}年の計画単価を基準に将来支出を増額）`}</td>
+        <th>試算期間</th>
+        <td>${data.meta.startYear}〜${data.meta.endYear}年（${data.meta.endYear - data.meta.startYear + 1}年）</td>
+      </tr>
+      <tr>
+        <th>利率シナリオ</th>
+        <td><strong>${esc(data.meta.scenarioName)}</strong>／すまい・る債 ${pct(data.meta.bondRateStart)}〜・預金 ${pct(data.meta.depositRate)}<div class="sub">${esc(data.meta.scenarioDescription)}</div></td>
+        <th>管理計画認定</th>
+        <td>${data.meta.isCertified ? 'あり（利率優遇）' : 'なし'}</td>
+      </tr>
+      <tr>
+        <th>すまい・る債の口数</th>
+        <td>${data.meta.currentUnitsPerYear > 0 ? `<strong>${data.meta.currentUnitsPerYear}口/年（年 ${man(data.meta.currentUnitsPerYear * 500_000)}）</strong>／${data.meta.bondStartYear}年から最大${data.meta.purchaseYears}回` : '運用なし'}</td>
+        <th>継続運用</th>
+        <td>${data.meta.reissue ? '<strong>あり</strong>（満期後も再応募して継続）' : 'なし（最大10回の1シリーズのみ）'}</td>
+      </tr>
+      <tr>
+        <th>積立金の引き上げ</th>
+        <td>${data.meta.reserveBoost ? `<strong>+${data.meta.reserveBoost.perUnitMonth.toLocaleString()}円/戸月</strong>（${data.meta.reserveBoost.fromYear}年〜／30年で追加徴収 ${man(data.meta.reserveBoost.totalExtra)}）` : 'なし（現行の段階増額計画のまま）'}</td>
+        <th>中途換金</th>
+        <td>${data.meta.allowEarlyRedemption ? 'あり（資金不足時に充当）' : 'なし'}</td>
+      </tr>
+      <tr>
+        <th>戸数・開始残高</th>
+        <td>${data.meta.units}戸／修繕積立金 ${oku(data.meta.openingBalance)}（3会計合算・第2期末）</td>
+        <th>会計区分</th>
+        <td>団地・ABC棟・DE棟の3会計</td>
+      </tr>
+    </tbody>
+  </table>
+  <p class="legend">※ これらの条件を変えて再出力すると、以降の数値はすべて連動して変わります。</p>
 
   <h2>1. 資金の見通しと「棟別」の注意点</h2>
   <p>修繕積立金は<strong>団地・ABC棟・DE棟の3会計に分離</strong>されており、各棟の資金は各棟の修繕にのみ使えます。長期修繕計画は「1回目の大規模修繕でほぼ残高ゼロ」に設計されており、余裕がほとんどありません。</p>

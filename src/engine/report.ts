@@ -113,6 +113,22 @@ export interface ReportData {
     currentUnitsPerYear: number
     /** 継続運用モード（満期後も新規発行を継続するか） */
     reissue: boolean
+    /** 修繕費の物価上昇率の基準年（長期修繕計画の単価時点） */
+    priceBaseYear: number
+    /** 管理計画認定マンションか */
+    isCertified: boolean
+    /** すまい・る債の継続購入年数の設定（最大10） */
+    purchaseYears: number
+    /** 資金不足時に中途換金して充当するか */
+    allowEarlyRedemption: boolean
+    /** すまい・る債の購入開始年度 */
+    bondStartYear: number
+    /** 開始年度のすまい・る債利率(%) */
+    bondRateStart: number
+    /** 預金利率(%) */
+    depositRate: number
+    /** 利率シナリオの説明 */
+    scenarioDescription: string
     /** reserveBoost が設定されている場合の情報 */
     reserveBoost?: {
       fromYear: number
@@ -440,6 +456,15 @@ export function buildReportData(
       currentUnitsPerYear: strategy.enabled ? strategy.unitsPerYear : 0,
       reissue,
       reserveBoost: reserveBoostMeta,
+      // 前提条件セクション用
+      priceBaseYear: input.priceBaseYear ?? input.startYear,
+      isCertified: input.isCertified,
+      purchaseYears: strategy.purchaseYears,
+      allowEarlyRedemption: strategy.allowEarlyRedemption,
+      bondStartYear: strategy.startYear,
+      bondRateStart: scenario.bondRatesByYear[input.startYear] ?? 0,
+      depositRate: scenario.depositRate,
+      scenarioDescription: scenario.description,
     },
     bigWorks,
     perAccount,
