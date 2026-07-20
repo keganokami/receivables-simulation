@@ -701,3 +701,67 @@ describe('buildReportData shortfallMatrix', () => {
     expect(data.shortfallMatrix.noShortfallAtBaseline).toBe(true)
   })
 })
+
+// ============================================================
+// buildReportData の costReduction フィールドのテスト
+// ============================================================
+
+describe('buildReportData costReduction（修繕費の削減余地）', () => {
+  const data = buildReportData(GEO_SAITO_COMBINED, GEO_SAITO_STRATEGY, 1)
+
+  it('costReduction の各フィールドが存在する', () => {
+    const cr = data.costReduction
+    expect(typeof cr.baseTotal).toBe('number')
+    expect(cr.baseTotal).toBeGreaterThan(0)
+    expect(cr.levers.length).toBeGreaterThan(0)
+    expect(typeof cr.all.total).toBe('number')
+    expect(typeof cr.impact.endingTotalBefore).toBe('number')
+    expect(typeof cr.impact.endingTotalAfter).toBe('number')
+    expect(typeof cr.impact.requiredBefore).toBe('number')
+    expect(typeof cr.impact.requiredAfter).toBe('number')
+  })
+
+  it('各レバーで netReduction = reduction - deferred が成立する', () => {
+    for (const l of data.costReduction.levers) {
+      expect(l.netReduction).toBeCloseTo(l.reduction - l.deferred, 6)
+      expect(l.reduction).toBeCloseTo(data.costReduction.baseTotal - l.total, 6)
+    }
+  })
+
+  it('all（全レバー適用）で netReduction = reduction - deferred が成立する', () => {
+    const { all, baseTotal } = data.costReduction
+    expect(all.netReduction).toBeCloseTo(all.reduction - all.deferred, 6)
+    expect(all.reduction).toBeCloseTo(baseTotal - all.total, 6)
+  })
+
+  it('修繕周期の延長レバーが levers に含まれる（既定=15年。ジオ彩都のデータでは15年では期間外へ出ないため deferred=0 になりうる）', () => {
+    const cycle = data.costReduction.levers.find((l) => l.key === 'cycle')
+    expect(cycle).toBeDefined()
+    expect(cycle!.deferred).toBeGreaterThanOrEqual(0)
+  })
+
+  it('基準年価格ベースのため inflationRate を変えても levers/all の金額が変わらない', () => {
+    const data0 = buildReportData({ ...GEO_SAITO_COMBINED, inflationRate: 0 }, GEO_SAITO_STRATEGY, 1)
+    const data2 = buildReportData({ ...GEO_SAITO_COMBINED, inflationRate: 0.02 }, GEO_SAITO_STRATEGY, 1)
+    expect(data2.costReduction.baseTotal).toBe(data0.costReduction.baseTotal)
+    expect(data2.costReduction.all.total).toBe(data0.costReduction.all.total)
+    expect(data2.costReduction.all.reduction).toBe(data0.costReduction.all.reduction)
+    expect(data2.costReduction.all.deferred).toBe(data0.costReduction.all.deferred)
+    for (let i = 0; i < data0.costReduction.levers.length; i++) {
+      expect(data2.costReduction.levers[i].total).toBe(data0.costReduction.levers[i].total)
+      expect(data2.costReduction.levers[i].netReduction).toBe(data0.costReduction.levers[i].netReduction)
+    }
+  })
+
+  it('impact は inflationRate で変わる', () => {
+    const data0 = buildReportData({ ...GEO_SAITO_COMBINED, inflationRate: 0 }, GEO_SAITO_STRATEGY, 1)
+    const data2 = buildReportData({ ...GEO_SAITO_COMBINED, inflationRate: 0.02 }, GEO_SAITO_STRATEGY, 1)
+    expect(data2.costReduction.impact.endingTotalBefore).not.toBe(data0.costReduction.impact.endingTotalBefore)
+    expect(data2.costReduction.impact.endingTotalAfter).not.toBe(data0.costReduction.impact.endingTotalAfter)
+  })
+
+  it('全レバー適用後の必要引き上げ額は削減前以下（または同じ）', () => {
+    const data2 = buildReportData({ ...GEO_SAITO_COMBINED, inflationRate: 0.02 }, GEO_SAITO_STRATEGY, 1)
+    expect(data2.costReduction.impact.requiredAfter).toBeLessThanOrEqual(data2.costReduction.impact.requiredBefore)
+  })
+})

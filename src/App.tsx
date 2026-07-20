@@ -24,6 +24,7 @@ import {
   serializeConfig,
 } from './engine/io'
 import { yen2man, pct } from './ui/format'
+import { SERIES } from './ui/palette'
 import {
   findOptimalUnits,
   requiredMonthlyIncrease,
@@ -61,7 +62,7 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-800">
-      <header className="bg-slate-800 text-white px-6 py-4 shadow">
+      <header className="sticky top-0 z-40 bg-slate-800 text-white px-6 py-4 shadow">
         <div className="max-w-7xl mx-auto flex flex-col md:flex-row md:items-center md:justify-between gap-2">
           <div>
             <h1 className="text-xl font-bold">修繕積立金シミュレーター</h1>
@@ -400,7 +401,7 @@ function SimulatorPage() {
       <div className="max-w-7xl mx-auto p-4 md:p-6 grid grid-cols-1 lg:grid-cols-[320px_1fr] gap-6">
         {/* ===== 操作パネル ===== */}
         <aside className="space-y-5">
-          <Panel title="前提条件">
+          <Panel title="前提条件" collapsible defaultOpen>
             <button
               className="w-full border border-slate-300 hover:bg-slate-50 rounded-md py-1.5 text-xs text-slate-600"
               onClick={resetToRealData}
@@ -475,7 +476,7 @@ function SimulatorPage() {
             </label>
           </Panel>
 
-          <Panel title="読み込み済みの実データ（前提）">
+          <Panel title="読み込み済みの実データ（前提）" collapsible defaultOpen={false}>
             <div className="text-xs space-y-1">
               <InfoRow
                 label="今年度の修繕積立金収入"
@@ -517,7 +518,7 @@ function SimulatorPage() {
             </p>
           </Panel>
 
-          <Panel title="利率シナリオ（金利情勢）">
+          <Panel title="利率シナリオ（金利情勢）" collapsible defaultOpen={false}>
             <select
               className="input"
               value={scenarioIdx}
@@ -532,7 +533,7 @@ function SimulatorPage() {
             <p className="text-xs text-slate-500 mt-2">{scenario.description}</p>
           </Panel>
 
-          <Panel title="すまい・る債の運用">
+          <Panel title="すまい・る債の運用" collapsible defaultOpen>
             <button
               type="button"
               className="w-full border border-sky-300 text-sky-700 hover:bg-sky-50 rounded-md py-1.5 text-xs"
@@ -641,7 +642,7 @@ function SimulatorPage() {
             )}
           </Panel>
 
-          <Panel title="積立金の引き上げシミュレーション">
+          <Panel title="積立金の引き上げシミュレーション" collapsible defaultOpen={false}>
             <p className="text-xs text-slate-500 -mt-1">
               段階増額計画に「戸あたり月額の定額上乗せ」をして、資金不足を避けるのに必要な増額を試算します。
             </p>
@@ -713,7 +714,7 @@ function SimulatorPage() {
             })()}
           </Panel>
 
-          <Panel title="データ入出力">
+          <Panel title="データ入出力" collapsible defaultOpen={false}>
             <input
               ref={fileRef}
               type="file"
@@ -1048,27 +1049,33 @@ function SimulatorPage() {
                   labelFormatter={(l) => `${l}年度`}
                 />
                 <Legend />
-                <Bar dataKey="修繕支出" fill="#f87171" barSize={14} />
+                <Bar dataKey="修繕支出" fill={SERIES.expense} barSize={14} radius={[4, 4, 0, 0]} />
                 <Area
                   type="monotone"
                   dataKey="すまいる債"
                   stackId="a"
-                  stroke="#0ea5e9"
-                  fill="#bae6fd"
+                  stroke={SERIES.bond}
+                  strokeWidth={2}
+                  fill={SERIES.bond}
+                  fillOpacity={0.25}
                 />
                 <Area
                   type="monotone"
                   dataKey="流動資金"
                   stackId="a"
-                  stroke="#10b981"
-                  fill="#bbf7d0"
+                  stroke={SERIES.liquid}
+                  strokeWidth={2}
+                  fill={SERIES.liquid}
+                  fillOpacity={0.25}
                 />
                 <Line
                   type="monotone"
                   dataKey="運用なし総資産"
-                  stroke="#64748b"
+                  stroke={SERIES.baseline}
+                  strokeWidth={2}
                   strokeDasharray="5 5"
                   dot={false}
+                  activeDot={{ r: 4 }}
                 />
               </ComposedChart>
             </ResponsiveContainer>
@@ -1089,7 +1096,7 @@ function SimulatorPage() {
                   formatter={(v: number) => [`${v.toLocaleString()}円/月`, '戸あたり平均月額']}
                   labelFormatter={(l) => `${l}年度`}
                 />
-                <Bar dataKey="戸あたり月額" fill="#6366f1" />
+                <Bar dataKey="戸あたり月額" fill={SERIES.reserve} radius={[4, 4, 0, 0]} />
               </ComposedChart>
             </ResponsiveContainer>
             <p className="text-xs text-slate-500 mt-2">
@@ -1113,11 +1120,11 @@ function SimulatorPage() {
                   labelFormatter={(l) => `${l}年度`}
                 />
                 <Legend />
-                <Line type="stepAfter" dataKey="ABC住戸合計" stroke="#6366f1" strokeWidth={2} dot={false} name="ABC住戸合計（ABC棟+団地）" />
-                <Line type="stepAfter" dataKey="DE住戸合計" stroke="#f59e0b" strokeWidth={2} dot={false} name="DE住戸合計（DE棟+団地）" />
-                <Line type="stepAfter" dataKey="団地会計" stroke="#10b981" strokeWidth={1.5} dot={false} strokeDasharray="4 2" />
-                <Line type="stepAfter" dataKey="ABC棟" stroke="#818cf8" strokeWidth={1.5} dot={false} strokeDasharray="4 2" />
-                <Line type="stepAfter" dataKey="DE棟" stroke="#fbbf24" strokeWidth={1.5} dot={false} strokeDasharray="4 2" />
+                <Line type="stepAfter" dataKey="ABC住戸合計" stroke={SERIES.abc} strokeWidth={2} dot={false} activeDot={{ r: 4 }} name="ABC住戸合計（ABC棟+団地）" />
+                <Line type="stepAfter" dataKey="DE住戸合計" stroke={SERIES.de} strokeWidth={2} dot={false} activeDot={{ r: 4 }} name="DE住戸合計（DE棟+団地）" />
+                <Line type="stepAfter" dataKey="団地会計" stroke={SERIES.danchi} strokeWidth={1.5} dot={false} strokeDasharray="4 2" />
+                <Line type="stepAfter" dataKey="ABC棟" stroke={SERIES.abc} strokeWidth={1.5} dot={false} strokeDasharray="4 2" />
+                <Line type="stepAfter" dataKey="DE棟" stroke={SERIES.de} strokeWidth={1.5} dot={false} strokeDasharray="4 2" />
               </ComposedChart>
             </ResponsiveContainer>
             <p className="text-xs text-slate-500 mt-2">
@@ -1129,6 +1136,44 @@ function SimulatorPage() {
             <p className="text-[11px] text-slate-400">
               ※ DE住戸合計のみ2年連続で上がる年があります。団地会計の改定年は2028/33/38/43年、DE棟会計の改定年は2029/34/39/44年で、DE棟は引渡しが1年遅く経年基準が2024年のため1年ずれています。DE住戸は「団地分＋DE棟分」の合計を払うため、団地分（2028年等）とDE棟分（2029年等）の改定が別々に効いて2年連続で上がります（ABC住戸は団地・ABC棟とも改定年が一致するため1回のみ）。
             </p>
+            {perAccountMonthlyData.length > 0 && (() => {
+              const first = perAccountMonthlyData[0]
+              const last = perAccountMonthlyData[perAccountMonthlyData.length - 1]
+              const rows: { label: string; key: keyof typeof first }[] = [
+                { label: '団地会計', key: '団地会計' },
+                { label: 'ABC棟', key: 'ABC棟' },
+                { label: 'DE棟', key: 'DE棟' },
+                { label: 'ABC住戸合計', key: 'ABC住戸合計' },
+                { label: 'DE住戸合計', key: 'DE住戸合計' },
+              ]
+              return (
+                <div className="overflow-x-auto mt-2">
+                  <table className="w-full text-xs border-collapse">
+                    <caption className="sr-only">棟別・団地別の戸あたり月額（初年度→最終年度・円/月）</caption>
+                    <thead>
+                      <tr className="bg-slate-100 text-slate-600">
+                        <th className="px-2 py-1 text-left font-medium border-b border-slate-200">会計</th>
+                        <th className="px-2 py-1 text-right font-medium border-b border-slate-200">{first.year}年</th>
+                        <th className="px-2 py-1 text-right font-medium border-b border-slate-200">{last.year}年</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {rows.map((r) => (
+                        <tr key={r.key} className="odd:bg-white even:bg-slate-50">
+                          <td className="px-2 py-1 border-b border-slate-100 text-slate-700">{r.label}</td>
+                          <td className="px-2 py-1 border-b border-slate-100 text-right text-slate-700 tabular-nums">
+                            {Number(first[r.key]).toLocaleString()}円/月
+                          </td>
+                          <td className="px-2 py-1 border-b border-slate-100 text-right text-slate-700 tabular-nums">
+                            {Number(last[r.key]).toLocaleString()}円/月
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )
+            })()}
           </Panel>
 
           {/* 大規模修繕・大型支出の予定 */}
@@ -1142,8 +1187,8 @@ function SimulatorPage() {
                   formatter={(v: number) => [`${v.toLocaleString()}万円`, '修繕支出（物価調整後）']}
                   labelFormatter={(l) => `${l}年度`}
                 />
-                <Bar dataKey="修繕支出" fill="#ef4444" barSize={18}
-                  label={{ position: 'top', fontSize: 10, formatter: (v: number) => v >= 5000 ? `${v.toLocaleString()}` : '' }}
+                <Bar dataKey="修繕支出" fill={SERIES.expense} barSize={18} radius={[4, 4, 0, 0]}
+                  label={{ position: 'top', fontSize: 10, fill: '#475569', formatter: (v: number) => v >= 5000 ? `${v.toLocaleString()}` : '' }}
                 />
               </ComposedChart>
             </ResponsiveContainer>
@@ -1171,9 +1216,9 @@ function SimulatorPage() {
                     <tbody>
                       {bigRows.map(row => (
                         <tr key={row.year} className="odd:bg-white even:bg-slate-50">
-                          <td className="px-2 py-1 font-medium text-red-700 whitespace-nowrap">{row.year}年</td>
+                          <td className="px-2 py-1 font-medium text-slate-700 whitespace-nowrap">{row.year}年</td>
                           <td className="px-2 py-1 text-slate-600">{row.labels}</td>
-                          <td className="px-2 py-1 text-right font-medium text-red-700 whitespace-nowrap">{yen2man(row.expense)}</td>
+                          <td className="px-2 py-1 text-right font-medium text-slate-700 whitespace-nowrap">{yen2man(row.expense)}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -1256,7 +1301,28 @@ function SimulatorPage() {
 // 小さなUI部品
 // ============================================================================
 
-function Panel({ title, children }: { title: string; children: ReactNode }) {
+function Panel({
+  title,
+  children,
+  collapsible,
+  defaultOpen = true,
+}: {
+  title: string
+  children: ReactNode
+  collapsible?: boolean
+  defaultOpen?: boolean
+}) {
+  if (collapsible) {
+    return (
+      <details open={defaultOpen} className="group bg-white rounded-xl shadow-sm border border-slate-200">
+        <summary className="cursor-pointer select-none list-none px-4 py-3 flex items-center justify-between font-semibold text-slate-700 text-sm [&::-webkit-details-marker]:hidden">
+          {title}
+          <span className="text-slate-400 text-xs transition-transform group-open:rotate-180">▾</span>
+        </summary>
+        <div className="px-4 pb-4 space-y-3">{children}</div>
+      </details>
+    )
+  }
   return (
     <section className="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
       <h2 className="font-semibold text-slate-700 mb-3 text-sm">{title}</h2>

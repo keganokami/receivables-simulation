@@ -2,6 +2,7 @@ import { simulate, simulateWithoutBond } from './simulate'
 import { RATE_SCENARIOS } from './scenarios'
 import { ACCOUNTS, accountInput } from './geoSaito'
 import { AssociationInput, BondStrategy, BOND_UNIT_YEN, RateScenario, SimulationResult } from './types'
+import { applyCostReductionsWithDetail, CostReductionOptions, DEFAULT_COST_REDUCTION_OPTIONS } from './costReduction'
 
 // geoSaito.ts の annualOf と同じロジックをここでも使う
 function annualOf(steps: { fromYear: number; annual: number }[], year: number): number {
@@ -226,6 +227,154 @@ export interface ReportData {
    * 追加4: 資金ショート解消マトリクス（積立引き上げ × すまい・る債の有無）
    */
   shortfallMatrix: ShortfallMatrixResult
+  /**
+   * 追加5: 修繕費の削減余地（参考試算）
+   * 既定の削減レバー設定（周期15年・棟一括5%・設計監理10%−5%・駐車場50%・仕様精査3%）を
+   * 単独適用した場合と全部適用した場合を、基準年価格（repairPlan の生の amount）で算出する。
+   */
+  costReduction: CostReductionReportData
+}
+
+// ============================================================================
+// 修繕費の削減余地（参考試算）
+// ============================================================================
+
+export interface CostReductionLeverResult {
+  key: string
+  name: string
+  /** 適用後の総支出（基準年価格・試算期間内） */
+  total: number
+  /** baseTotal - total（見かけの削減額） */
+  reduction: number
+  /** うち期間外へ繰り延べ（基準年価格） */
+  deferred: number
+  /** reduction - deferred（実質削減額） */
+  netReduction: number
+}
+
+export interface CostReductionReportData {
+  /** 削減前の総修繕支出（基準年価格・試算期間内） */
+  baseTotal: number
+  /** 各レバー単独適用（既定の削減率） */
+  levers: CostReductionLeverResult[]
+  /** 全レバー適用 */
+  all: { total: number; reduction: number; deferred: number; netReduction: number }
+  /** 資金への影響（物価調整後・現在のscenario/strategy/inflationRate） */
+  impact: {
+    endingTotalBefore: number
+    endingTotalAfter: number
+    shortfallYearBefore: number | null
+    shortfallYearAfter: number | null
+    requiredBefore: number
+    requiredAfter: number
+  }
+}
+
+/** 削減余地レポートで使う既定レバー設定（周期15年・棟一括5%・設計監理10%−5%・駐車場50%・仕様精査3%） */
+const REPORT_LEVER_DEFS: { key: string; name: string; opts: Partial<CostReductionOptions> }[] = [
+  {
+    key: 'cycle',
+    name: '修繕周期の延長（15年）',
+    opts: { cycleExtension: { enabled: true, newCycle: 15 } },
+  },
+  {
+    key: 'unify',
+    name: '棟の一括発注（5%削減）',
+    opts: { unifyBuildings: { enabled: true, savingRate: 0.05 } },
+  },
+  {
+    key: 'design',
+    name: '設計監理方式（10%削減−コンサル5%）',
+    opts: { designSupervision: { enabled: true, savingRate: 0.1, consultantFeeRate: 0.05 } },
+  },
+  {
+    key: 'parking',
+    name: '機械式駐車場の見直し（50%削減）',
+    opts: { parkingReduction: { enabled: true, reductionRate: 0.5 } },
+  },
+  {
+    key: 'scope',
+    name: '仕様・数量の精査（3%削減）',
+    opts: { scopeOptimization: { enabled: true, reductionRate: 0.03 } },
+  },
+]
+
+/** repairPlan の合計額（基準年価格・試算期間内のみ）。物価設定に依存しない。 */
+function sumRepairPlanBaseYear(input: AssociationInput): number {
+  const endYear = input.startYear + input.horizonYears - 1
+  return input.repairPlan
+    .filter((r) => r.year >= input.startYear && r.year <= endYear)
+    .reduce((s, r) => s + r.amount, 0)
+}
+
+function mkCostReductionOptions(partial: Partial<CostReductionOptions>): CostReductionOptions {
+  return {
+    cycleExtension: { ...DEFAULT_COST_REDUCTION_OPTIONS.cycleExtension },
+    unifyBuildings: { ...DEFAULT_COST_REDUCTION_OPTIONS.unifyBuildings },
+    designSupervision: { ...DEFAULT_COST_REDUCTION_OPTIONS.designSupervision },
+    parkingReduction: { ...DEFAULT_COST_REDUCTION_OPTIONS.parkingReduction },
+    scopeOptimization: { ...DEFAULT_COST_REDUCTION_OPTIONS.scopeOptimization },
+    ...partial,
+  }
+}
+
+/**
+ * 修繕費の削減余地（参考試算）を算出する。
+ * 金額は必ず「基準年価格」で統一（物価調整前）。impact のみ物価調整後（simulate ベース）。
+ */
+export function buildCostReductionData(
+  input: AssociationInput,
+  scenario: RateScenario,
+  strategy: BondStrategy
+): CostReductionReportData {
+  const baseTotal = sumRepairPlanBaseYear(input)
+
+  const levers: CostReductionLeverResult[] = REPORT_LEVER_DEFS.map((def) => {
+    const opts = mkCostReductionOptions(def.opts)
+    const { input: reducedInput, deferredOutOfHorizon } = applyCostReductionsWithDetail(input, opts)
+    const total = sumRepairPlanBaseYear(reducedInput)
+    const reduction = baseTotal - total
+    const deferred = deferredOutOfHorizon.totalAmount
+    return {
+      key: def.key,
+      name: def.name,
+      total,
+      reduction,
+      deferred,
+      netReduction: reduction - deferred,
+    }
+  })
+
+  // 全レバー適用
+  const allOptsPartial = REPORT_LEVER_DEFS.reduce<Partial<CostReductionOptions>>(
+    (acc, def) => ({ ...acc, ...def.opts }),
+    {}
+  )
+  const allOpts = mkCostReductionOptions(allOptsPartial)
+  const allResult = applyCostReductionsWithDetail(input, allOpts)
+  const allTotal = sumRepairPlanBaseYear(allResult.input)
+  const allReduction = baseTotal - allTotal
+  const allDeferred = allResult.deferredOutOfHorizon.totalAmount
+  const all = {
+    total: allTotal,
+    reduction: allReduction,
+    deferred: allDeferred,
+    netReduction: allReduction - allDeferred,
+  }
+
+  // 資金への影響（物価調整後・全レバー適用の前後で比較）
+  const resBefore = simulate(input, scenario, strategy)
+  const resAfter = simulate(allResult.input, scenario, strategy)
+  const impact = {
+    endingTotalBefore: resBefore.endingTotal,
+    endingTotalAfter: resAfter.endingTotal,
+    shortfallYearBefore: resBefore.firstShortfallYear,
+    shortfallYearAfter: resAfter.firstShortfallYear,
+    requiredBefore: requiredMonthlyIncrease(input, scenario, strategy),
+    requiredAfter: requiredMonthlyIncrease(allResult.input, scenario, strategy),
+  }
+
+  return { baseTotal, levers, all, impact }
 }
 
 const BIG_WORK_THRESHOLD = 50_000_000
@@ -435,6 +584,9 @@ export function buildReportData(
   // ---- 追加4: 資金ショート解消マトリクス ----
   const shortfallMatrix = computeShortfallMatrix(input, scenario, strategy)
 
+  // ---- 追加5: 修繕費の削減余地（参考試算） ----
+  const costReduction = buildCostReductionData(input, scenario, strategy)
+
   // ---- reserveBoost の情報 ----
   const reserveBoostMeta = input.reserveBoost && input.reserveBoost.addAnnual > 0
     ? {
@@ -503,6 +655,7 @@ export function buildReportData(
       },
     },
     shortfallMatrix,
+    costReduction,
   }
 }
 

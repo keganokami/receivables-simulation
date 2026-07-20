@@ -338,6 +338,51 @@ function shortfallMatrixHtml(d: ReportData): string {
   <p class="sub">現在の設定（シナリオ「${esc(d.meta.scenarioName)}」・物価上昇率 ${pct(d.meta.inflationRate * 100)}）を前提とした試算です。表の各水準は独立に試算しており、上乗せ開始年度は${sm.fromYear}年です。</p>`
 }
 
+// ---- 追加5: 修繕費の削減余地（参考試算）セクション ----
+const cr = data.costReduction
+function costReductionHtml(d: ReportData): string {
+  const leverRows = cr.levers
+    .map(
+      (l) => `<tr>
+      <td>${esc(l.name)}</td>
+      <td class="r">${man(l.total)}</td>
+      <td class="r">${l.reduction >= 0 ? '▲' : '+'}${man(Math.abs(l.reduction))}</td>
+      <td class="r">${l.deferred > 0 ? man(l.deferred) : '—'}</td>
+      <td class="r ${l.netReduction > 0 ? 'ok' : l.netReduction < 0 ? 'neg' : ''}">${l.netReduction >= 0 ? '▲' : '+'}${man(Math.abs(l.netReduction))}</td>
+    </tr>`
+    )
+    .join('')
+  const allRow = `<tr class="hl">
+      <td><strong>全レバー適用</strong></td>
+      <td class="r"><strong>${man(cr.all.total)}</strong></td>
+      <td class="r"><strong>${cr.all.reduction >= 0 ? '▲' : '+'}${man(Math.abs(cr.all.reduction))}</strong></td>
+      <td class="r"><strong>${cr.all.deferred > 0 ? man(cr.all.deferred) : '—'}</strong></td>
+      <td class="r ${cr.all.netReduction > 0 ? 'ok' : cr.all.netReduction < 0 ? 'neg' : ''}"><strong>${cr.all.netReduction >= 0 ? '▲' : '+'}${man(Math.abs(cr.all.netReduction))}</strong></td>
+    </tr>`
+  const im = cr.impact
+  const savingRequired = im.requiredBefore - im.requiredAfter
+  return `<p>修繕費そのものを抑える一般的な手法を、既定の削減率で試算しました（周期延長15年・棟の一括発注5%・設計監理方式10%−コンサル5%・機械式駐車場見直し50%・仕様精査3%）。</p>
+  <p class="sub">削減前の総修繕支出（基準年 ${d.meta.priceBaseYear}年価格・試算期間内）: <strong>${man(cr.baseTotal)}</strong></p>
+  <table>
+    <thead><tr><th>レバー</th><th class="r">適用後総支出</th><th class="r">削減額</th><th class="r">うち期間外へ繰り延べ</th><th class="r">実質削減額</th></tr></thead>
+    <tbody>${leverRows}${allRow}</tbody>
+  </table>
+  <h3>資金への影響（全レバー適用時）</h3>
+  <table>
+    <thead><tr><th>指標</th><th class="r">削減前</th><th class="r">削減後</th></tr></thead>
+    <tbody>
+      <tr><td>期末総資産</td><td class="r">${man(im.endingTotalBefore)}</td><td class="r">${man(im.endingTotalAfter)}</td></tr>
+      <tr><td>資金ショート</td><td class="r ${im.shortfallYearBefore ? 'neg' : 'ok'}">${im.shortfallYearBefore ? im.shortfallYearBefore + '年' : 'なし'}</td><td class="r ${im.shortfallYearAfter ? 'neg' : 'ok'}">${im.shortfallYearAfter ? im.shortfallYearAfter + '年' : 'なし'}</td></tr>
+      <tr><td>必要な積立引き上げ（円/戸月）</td><td class="r ${im.requiredBefore > 0 ? 'neg' : 'ok'}">${im.requiredBefore > 0 ? '+' + im.requiredBefore.toLocaleString('ja-JP') : '不要'}</td><td class="r ${im.requiredAfter > 0 ? 'neg' : 'ok'}">${im.requiredAfter > 0 ? '+' + im.requiredAfter.toLocaleString('ja-JP') : '不要'}</td></tr>
+    </tbody>
+  </table>
+  ${savingRequired > 0 ? `<div class="box"><p style="margin:0" class="ok">全レバー適用により、必要な積立引き上げが <strong>▲${savingRequired.toLocaleString('ja-JP')}円/戸月</strong> 軽減される計算です。</p></div>` : ''}
+  <div class="box warn">
+    <p style="margin:4px 0">金額は基準年（${d.meta.priceBaseYear}年）価格。削減率は<strong>利用者が置く仮定値</strong>で、手法別の削減率の統計は公表されていません。実額は建物診断・見積り・発注方式で変わります。</p>
+    <p style="margin:4px 0"><strong>修繕周期の延長は試算期間内では「先送り」として現れます。</strong>期間外へ出た工事費は支出が消えたわけではなく、物価上昇分だけ将来大きくなります（例：周期18年で期間外へ出る2件は基準年価格6.2億円→物価2%継続で12.8億円相当）。周期延長は建物診断による検証が前提です。</p>
+  </div>`
+}
+
 // ---- 追加3: 棟別の毎月の修繕積立金セクション ----
 const pam = data.perAccountMonthly
 const yen = (n: number) => n.toLocaleString('ja-JP') + '円'
@@ -501,7 +546,10 @@ const html = `<!doctype html>
   <p>各会計の戸あたり平均月額（積立金収入÷戸数÷12）の初年度・最終年度と、住戸が実際に払う合計（棟別＋団地）の比較です。</p>
   ${perAccountMonthlyHtml}
 
-  <h2>10. 最新の利率・金利情勢に関する所見</h2>
+  <h2>10. 修繕費の削減余地（参考試算）</h2>
+  ${costReductionHtml(data)}
+
+  <h2>11. 最新の利率・金利情勢に関する所見</h2>
   ${commentaryHtml}
 
   <div class="foot">

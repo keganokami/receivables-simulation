@@ -22,6 +22,7 @@ import {
   DEFAULT_COST_REDUCTION_OPTIONS,
 } from './engine/costReduction'
 import { yen2man, pct } from './ui/format'
+import { SERIES } from './ui/palette'
 
 // ============================================================================
 // 修繕費の削減シミュレーション ページ
@@ -612,21 +613,24 @@ export default function SavingsPage() {
                   labelFormatter={(l) => `${l}年度`}
                 />
                 <Legend />
-                <Bar dataKey="修繕支出_削減後" fill="#fca5a5" barSize={14} name="修繕支出（削減後）" />
+                <Bar dataKey="修繕支出_削減後" fill={SERIES.expense} barSize={14} radius={[4, 4, 0, 0]} name="修繕支出（削減後）" />
                 <Line
                   type="monotone"
                   dataKey="総資産_削減前"
-                  stroke="#64748b"
+                  stroke={SERIES.baseline}
+                  strokeWidth={2}
                   strokeDasharray="5 5"
                   dot={false}
+                  activeDot={{ r: 4 }}
                   name="総資産（削減前）"
                 />
                 <Line
                   type="monotone"
                   dataKey="総資産_削減後"
-                  stroke="#0ea5e9"
+                  stroke={SERIES.bond}
                   strokeWidth={2}
                   dot={false}
+                  activeDot={{ r: 4 }}
                   name="総資産（削減後）"
                 />
               </ComposedChart>
